@@ -7,8 +7,8 @@
   "scripts": {
     "ingest": "node packages/ingest/src/index.js",
     "watch": "node packages/ingest/src/index.js --watch",
-    "dev": "npm run ingest && npx --prefix packages/dashboard vite --host 0.0.0.0 --port 5173",
-    "build": "npm run ingest && npx --prefix packages/dashboard vite build",
+    "dev": "npm run ingest && cd packages/dashboard && npx vite --host 0.0.0.0 --port 5173",
+    "build": "npm run ingest && cd packages/dashboard && npx vite build",
     "test": "node --test packages/ingest/test/discovery.test.js && npx --prefix packages/dashboard vitest run",
     "lint": "npx --prefix packages/dashboard eslint packages/dashboard/src/"
   }
