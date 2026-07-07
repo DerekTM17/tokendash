@@ -1,0 +1,7 @@
+{
+  "name": "token-dashboard",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}
