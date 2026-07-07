@@ -2,7 +2,10 @@ import { discoverProjects, matchProject } from './discovery.js';
 
 export function normalize(sessions, projects) {
   const normalized = sessions.map(s => {
-    const project = matchProject(s.cwd || s.projectPath, projects);
+    let project = matchProject(s.cwd || s.projectPath || s.project, projects);
+    if (project === 'other' && s.project && s.project !== 'other') {
+      project = s.project;
+    }
     return {
       id: s.id,
       tool: s.tool,

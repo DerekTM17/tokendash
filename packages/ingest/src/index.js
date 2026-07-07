@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const watch = args.includes('--watch');
 const outputPath = args.find(a => a.startsWith('--output='))?.split('=')[1]
-  || path.resolve(__dirname, '..', '..', '..', 'dashboard', 'public', 'tokens.json');
+  || path.resolve(__dirname, '..', '..', 'dashboard', 'public', 'tokens.json');
 
 function ingest() {
   const projects = discoverProjects();

@@ -11,15 +11,17 @@ function extractRepoName(cwd) {
 export function parseClaudeJSON(filePath) {
   const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   const sessions = [];
+  const projects = raw.projects || {};
 
-  for (const [key, value] of Object.entries(raw)) {
+  for (const [cwd, value] of Object.entries(projects)) {
     if (typeof value !== 'object' || value === null) continue;
     if (!('lastCost' in value)) continue;
 
     sessions.push({
-      id: key,
+      id: cwd.replace(/[^a-zA-Z0-9]/g, '_'),
       tool: 'claude',
-      project: extractRepoName(value.cwd),
+      cwd,
+      project: extractRepoName(cwd),
       model: value.model || 'unknown',
       startedAt: value.start || null,
       duration: value.duration || null,
