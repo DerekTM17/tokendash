@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { discoverProjects } from './discovery.js';
 import { normalize } from './normalizer.js';
 import { parseClaudeJSON, defaultPath as claudePath } from './parsers/claude.js';
+import { parseOpencodeSessions, defaultPath as opencodePath } from './parsers/opencode.js';
+import { parseCodexData, defaultPath as codexPath } from './parsers/codex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -23,6 +25,24 @@ function ingest() {
       sessions.push(...parseClaudeJSON(claudeConfigPath));
     } catch (e) {
       console.error('Failed to parse Claude Code config:', e.message);
+    }
+  }
+
+  const opencodeConfigPath = opencodePath();
+  if (fs.existsSync(opencodeConfigPath)) {
+    try {
+      sessions.push(...parseOpencodeSessions(opencodeConfigPath));
+    } catch (e) {
+      console.error('Failed to parse opencode sessions:', e.message);
+    }
+  }
+
+  const codexConfigPath = codexPath();
+  if (fs.existsSync(codexConfigPath)) {
+    try {
+      sessions.push(...parseCodexData(codexConfigPath));
+    } catch (e) {
+      console.error('Failed to parse Codex data:', e.message);
     }
   }
 
@@ -49,6 +69,11 @@ if (watch) {
 
     const cp = claudePath();
     if (fs.existsSync(cp)) sources.push(cp);
+    const op = opencodePath();
+    if (fs.existsSync(op)) sources.push(op);
+    const cx = codexPath();
+    const historyPath = path.join(cx, 'history.jsonl');
+    if (fs.existsSync(historyPath)) sources.push(historyPath);
 
     const watcher = chokidar.watch(sources, { persistent: true });
     watcher.on('change', () => {
