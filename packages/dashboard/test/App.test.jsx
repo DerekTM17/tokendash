@@ -10,6 +10,6 @@ describe('App', () => {
 
   it('shows date filter buttons', () => {
     render(<App />);
-    expect(screen.getByText('All time')).toBeDefined();
+    expect(screen.getByText('All')).toBeDefined();
   });
 });

@@ -4,9 +4,10 @@ export function formatCost(cost) {
 }
 
 export function formatTokens(tokens) {
+  if (tokens >= 1e9) return `${(tokens / 1e9).toFixed(1)}B`;
   if (tokens >= 1e6) return `${(tokens / 1e6).toFixed(1)}M`;
   if (tokens >= 1e3) return `${(tokens / 1e3).toFixed(1)}K`;
-  return String(tokens);
+  return String(Math.round(tokens));
 }
 
 export function formatDuration(seconds) {

@@ -2,38 +2,162 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-function extractRepoName(cwd) {
-  if (!cwd) return null;
-  const parts = cwd.split(path.sep);
-  return parts[parts.length - 1] || null;
+function decodeCwdFromDir(dirName) {
+  if (dirName.charAt(0) === '-') dirName = dirName.slice(1);
+  return '/' + dirName.replace(/-/g, '/');
 }
 
-export function parseClaudeJSON(filePath) {
+function readClaudeConfig(filePath) {
   const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  const sessions = [];
   const projects = raw.projects || {};
+  const bySessionId = new Map();
 
   for (const [cwd, value] of Object.entries(projects)) {
     if (typeof value !== 'object' || value === null) continue;
-    if (!('lastCost' in value)) continue;
+    if (!value.lastSessionId) continue;
 
-    sessions.push({
-      id: cwd.replace(/[^a-zA-Z0-9]/g, '_'),
-      tool: 'claude',
+    bySessionId.set(value.lastSessionId, {
       cwd,
-      project: extractRepoName(cwd),
-      model: value.model || 'unknown',
-      startedAt: value.start || null,
-      duration: value.duration || null,
-      inputTokens: value.lastTotalInputTokens || 0,
-      outputTokens: value.lastTotalOutputTokens || 0,
-      cacheReadTokens: value.lastTotalCacheReadInputTokens || 0,
-      cacheWriteTokens: value.lastTotalCacheCreationInputTokens || 0,
       cost: value.lastCost || 0,
-      currency: 'USD',
+      duration: value.lastDuration || null,
     });
   }
+  return bySessionId;
+}
 
+function parseTranscriptFile(filePath) {
+  const content = fs.readFileSync(filePath, 'utf8');
+  const lines = content.trim().split('\n');
+
+  let firstTimestamp = null;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
+  const modelTokens = new Map();
+  // A single transcript folder can hold sessions from several cwds, and a user
+  // may `cd` mid-session, so pick the dominant (most frequent) cwd rather than
+  // the first one seen.
+  const cwdCounts = new Map();
+
+  for (const line of lines) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    if (entry.timestamp && (!firstTimestamp || entry.timestamp < firstTimestamp)) {
+      firstTimestamp = entry.timestamp;
+    }
+    if (entry.cwd) {
+      cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
+    }
+
+    if (entry.type !== 'assistant') continue;
+    if (!entry.message || entry.message.role !== 'assistant') continue;
+    const usage = entry.message.usage;
+    if (!usage) continue;
+
+    const model = entry.message.model || 'unknown';
+    const tokInput = usage.input_tokens || 0;
+    const tokOutput = usage.output_tokens || 0;
+    const tokCacheRead = usage.cache_read_input_tokens || 0;
+    const tokCacheWrite = usage.cache_creation_input_tokens || 0;
+
+    inputTokens += tokInput;
+    outputTokens += tokOutput;
+    cacheReadTokens += tokCacheRead;
+    cacheWriteTokens += tokCacheWrite;
+
+    const total = tokInput + tokOutput + tokCacheRead + tokCacheWrite;
+    modelTokens.set(model, (modelTokens.get(model) || 0) + total);
+  }
+
+  let model = 'unknown';
+  let bestTotal = -1;
+  for (const [m, t] of modelTokens) {
+    if (t > bestTotal) {
+      bestTotal = t;
+      model = m;
+    }
+  }
+
+  let cwd = null;
+  let bestCwd = -1;
+  for (const [c, n] of cwdCounts) {
+    if (n > bestCwd) {
+      bestCwd = n;
+      cwd = c;
+    }
+  }
+
+  return {
+    cwd,
+    model,
+    firstTimestamp,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+  };
+}
+
+export function parseClaudeJSON(projectsDir) {
+  const base = projectsDir || path.join(os.homedir(), '.claude', 'projects');
+  const configPath = path.join(os.homedir(), '.claude.json');
+  const configBySession = fs.existsSync(configPath)
+    ? readClaudeConfig(configPath)
+    : new Map();
+
+  const sessions = [];
+
+  if (!fs.existsSync(base)) return sessions;
+
+  const projDirs = fs.readdirSync(base, { withFileTypes: true }).filter(d => d.isDirectory());
+  for (const projDir of projDirs) {
+    const dirPath = path.join(base, projDir.name);
+    const files = fs.readdirSync(dirPath);
+    const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+
+    for (const file of jsonlFiles) {
+      const sessionId = file.slice(0, -6);
+      const filePath = path.join(dirPath, file);
+
+      let transcript;
+      try {
+        transcript = parseTranscriptFile(filePath);
+      } catch {
+        continue;
+      }
+
+      const config = configBySession.get(sessionId) || {};
+
+      sessions.push({
+        id: `claude_${sessionId}`,
+        tool: 'claude',
+        // The transcript's own cwd is authoritative. Only fall back to the
+        // config path or the folder-name decode (lossy — it turns any '-' in a
+        // real dir name into '/') when the transcript carried no cwd.
+        cwd: transcript.cwd || config.cwd || decodeCwdFromDir(projDir.name),
+        project: '',
+        model: transcript.model,
+        startedAt: transcript.firstTimestamp
+          ? new Date(transcript.firstTimestamp).toISOString()
+          : null,
+        duration: config.duration || null,
+        inputTokens: transcript.inputTokens,
+        outputTokens: transcript.outputTokens,
+        cacheReadTokens: transcript.cacheReadTokens,
+        cacheWriteTokens: transcript.cacheWriteTokens,
+        cost: config.cost || 0,
+        currency: 'USD',
+      });
+    }
+  }
+
+  sessions.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
   return sessions;
 }
 

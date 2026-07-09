@@ -1,9 +1,9 @@
 import { useState } from 'react';
 
 const options = [
-  { label: 'All time', value: 'all' },
-  { label: 'Last 7 days', value: '7d' },
-  { label: 'Last 30 days', value: '30d' },
+  { label: 'All', value: 'all' },
+  { label: '7d', value: '7d' },
+  { label: '30d', value: '30d' },
 ];
 
 export function filterSessions(sessions, range) {
@@ -22,16 +22,21 @@ export default function DateFilter({ onChange }) {
   };
 
   return (
-    <div className="flex gap-2">
+    <div style={{ display: 'flex', gap: 4, padding: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 8 }}>
       {options.map(o => (
         <button
           key={o.value}
           onClick={() => handleChange(o.value)}
-          className="text-xs px-3 py-1 rounded"
           style={{
-            backgroundColor: selected === o.value ? 'var(--accent)' : 'var(--bg-card)',
-            color: selected === o.value ? 'var(--bg-primary)' : 'var(--text-muted)',
-            border: '1px solid var(--border)',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 12,
+            fontWeight: selected === o.value ? 500 : 400,
+            color: selected === o.value ? '#fff' : 'rgba(255,255,255,0.5)',
+            background: selected === o.value ? 'rgba(255,255,255,0.12)' : 'transparent',
+            border: 'none',
+            borderRadius: 6,
+            padding: '5px 12px',
+            cursor: 'pointer',
           }}
         >
           {o.label}

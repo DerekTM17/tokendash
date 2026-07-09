@@ -19,8 +19,8 @@ describe('filterSessions', () => {
 describe('DateFilter', () => {
   it('renders all options', () => {
     render(<DateFilter onChange={() => {}} />);
-    expect(screen.getByText('All time')).toBeDefined();
-    expect(screen.getByText('Last 7 days')).toBeDefined();
-    expect(screen.getByText('Last 30 days')).toBeDefined();
+    expect(screen.getByText('All')).toBeDefined();
+    expect(screen.getByText('7d')).toBeDefined();
+    expect(screen.getByText('30d')).toBeDefined();
   });
 });

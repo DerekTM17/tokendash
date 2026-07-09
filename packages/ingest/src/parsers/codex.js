@@ -2,37 +2,116 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-function parseHistoryJSONL(filePath) {
-  const sessions = [];
-  if (!fs.existsSync(filePath)) return sessions;
+function walkRolloutFiles(sessionsDir) {
+  const results = [];
+  if (!fs.existsSync(sessionsDir)) return results;
 
+  const years = fs.readdirSync(sessionsDir, { withFileTypes: true }).filter(d => d.isDirectory());
+  for (const year of years) {
+    const yearPath = path.join(sessionsDir, year.name);
+    const months = fs.readdirSync(yearPath, { withFileTypes: true }).filter(d => d.isDirectory());
+    for (const month of months) {
+      const monthPath = path.join(yearPath, month.name);
+      const days = fs.readdirSync(monthPath, { withFileTypes: true }).filter(d => d.isDirectory());
+      for (const day of days) {
+        const dayPath = path.join(monthPath, day.name);
+        const files = fs.readdirSync(dayPath).filter(f => f.startsWith('rollout-') && f.endsWith('.jsonl'));
+        for (const file of files) {
+          const match = file.match(/^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.jsonl$/);
+          if (!match) continue;
+          results.push({ sessionId: match[1], filePath: path.join(dayPath, file) });
+        }
+      }
+    }
+  }
+  return results;
+}
+
+function parseRolloutFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.trim().split('\n');
+
+  let cwd = null;
+  let model = 'unknown';
+  let firstTimestamp = null;
+  let lastTokenUsage = null;
+
   for (const line of lines) {
+    let entry;
     try {
-      const entry = JSON.parse(line);
-      sessions.push({
-        id: entry.session_id || String(Date.now()),
-        tool: 'codex',
-        model: 'unknown',
-        startedAt: entry.ts ? new Date(Number(entry.ts) * 1000).toISOString() : null,
-        duration: null,
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        cost: 0,
-        currency: 'USD',
-      });
-    } catch {}
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    if (entry.timestamp && !firstTimestamp) {
+      firstTimestamp = entry.timestamp;
+    }
+
+    if (!cwd && entry.type === 'session_meta' && entry.payload?.cwd) {
+      cwd = entry.payload.cwd;
+    }
+
+    if (!cwd && entry.type === 'turn_context' && entry.payload?.cwd) {
+      cwd = entry.payload.cwd;
+    }
+
+    if (model === 'unknown' && entry.type === 'turn_context' && entry.payload?.model) {
+      model = entry.payload.model;
+    }
+
+    if (entry.type === 'event_msg' && entry.payload?.type === 'token_count') {
+      if (entry.payload.info?.total_token_usage) {
+        lastTokenUsage = entry.payload.info.total_token_usage;
+      }
+    }
   }
 
-  return sessions;
+  return {
+    cwd,
+    model,
+    firstTimestamp,
+    inputTokens: lastTokenUsage?.input_tokens || 0,
+    outputTokens: (lastTokenUsage?.output_tokens || 0) + (lastTokenUsage?.reasoning_output_tokens || 0),
+    cacheReadTokens: lastTokenUsage?.cached_input_tokens || 0,
+    cacheWriteTokens: 0,
+  };
 }
 
 export function parseCodexData(codexDir) {
-  const historyPath = path.join(codexDir, 'history.jsonl');
-  return parseHistoryJSONL(historyPath);
+  const sessionsDir = path.join(codexDir, 'sessions');
+  const rolloutFiles = walkRolloutFiles(sessionsDir);
+  const sessions = [];
+
+  for (const { sessionId, filePath } of rolloutFiles) {
+    let transcript;
+    try {
+      transcript = parseRolloutFile(filePath);
+    } catch {
+      continue;
+    }
+
+    sessions.push({
+      id: `codex_${sessionId}`,
+      tool: 'codex',
+      cwd: transcript.cwd || '',
+      project: '',
+      model: transcript.model,
+      startedAt: transcript.firstTimestamp
+        ? new Date(transcript.firstTimestamp).toISOString()
+        : null,
+      duration: null,
+      inputTokens: transcript.inputTokens,
+      outputTokens: transcript.outputTokens,
+      cacheReadTokens: transcript.cacheReadTokens,
+      cacheWriteTokens: transcript.cacheWriteTokens,
+      cost: 0,
+      currency: 'USD',
+    });
+  }
+
+  sessions.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
+  return sessions;
 }
 
 export function defaultPath() {

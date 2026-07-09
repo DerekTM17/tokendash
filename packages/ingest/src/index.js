@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { discoverProjects } from './discovery.js';
 import { normalize } from './normalizer.js';
-import { parseClaudeJSON, defaultPath as claudePath } from './parsers/claude.js';
-import { parseOpencodeSessions, defaultPath as opencodePath } from './parsers/opencode.js';
+import { parseClaudeJSON } from './parsers/claude.js';
+import { parseOpencodeSessions } from './parsers/opencode.js';
 import { parseCodexData, defaultPath as codexPath } from './parsers/codex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,22 +20,16 @@ function ingest() {
   const projects = discoverProjects();
   const sessions = [];
 
-  const claudeConfigPath = claudePath();
-  if (fs.existsSync(claudeConfigPath)) {
-    try {
-      sessions.push(...parseClaudeJSON(claudeConfigPath));
-    } catch (e) {
-      console.error('Failed to parse Claude Code config:', e.message);
-    }
+  try {
+    sessions.push(...parseClaudeJSON());
+  } catch (e) {
+    console.error('Failed to parse Claude Code sessions:', e.message);
   }
 
-  const opencodeConfigPath = opencodePath();
-  if (fs.existsSync(opencodeConfigPath)) {
-    try {
-      sessions.push(...parseOpencodeSessions(opencodeConfigPath));
-    } catch (e) {
-      console.error('Failed to parse opencode sessions:', e.message);
-    }
+  try {
+    sessions.push(...parseOpencodeSessions());
+  } catch (e) {
+    console.error('Failed to parse opencode sessions:', e.message);
   }
 
   const codexConfigPath = codexPath();
@@ -67,13 +62,12 @@ if (watch) {
     const chokidar = (await import('chokidar')).default;
     const sources = [];
 
-    const cp = claudePath();
-    if (fs.existsSync(cp)) sources.push(cp);
-    const op = opencodePath();
-    if (fs.existsSync(op)) sources.push(op);
-    const cx = codexPath();
-    const historyPath = path.join(cx, 'history.jsonl');
-    if (fs.existsSync(historyPath)) sources.push(historyPath);
+    const claudeConfig = path.join(os.homedir(), '.claude.json');
+    if (fs.existsSync(claudeConfig)) sources.push(claudeConfig);
+    const claudeHistory = path.join(os.homedir(), '.claude', 'history.jsonl');
+    if (fs.existsSync(claudeHistory)) sources.push(claudeHistory);
+    const opencodeDb = path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
+    if (fs.existsSync(opencodeDb)) sources.push(opencodeDb);
 
     const watcher = chokidar.watch(sources, { persistent: true });
     watcher.on('change', () => {
