@@ -5,7 +5,7 @@ export function useTokenData() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch('/tokens.json')
+    fetch(`${import.meta.env.BASE_URL}tokens.json`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();

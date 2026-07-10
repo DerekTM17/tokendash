@@ -1,43 +1,60 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { discoverProjects, matchProject } from '../src/discovery.js';
+
+// Build a hermetic fixture tree so the test doesn't depend on the machine's
+// real home directory (which differs between dev and CI).
+let root;
+before(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'discovery-'));
+  fs.mkdirSync(path.join(root, 'alpha', '.git'), { recursive: true });      // a git repo
+  fs.mkdirSync(path.join(root, 'nested', 'beta', '.git'), { recursive: true }); // nested repo
+  fs.mkdirSync(path.join(root, 'plain'), { recursive: true });               // not a repo
+});
+after(() => {
+  fs.rmSync(root, { recursive: true, force: true });
+});
 
 describe('discoverProjects', () => {
   it('returns an array', () => {
-    const projects = discoverProjects(process.env.HOME);
-    assert.ok(Array.isArray(projects));
+    assert.ok(Array.isArray(discoverProjects([root])));
   });
 
-  it('includes known repos from home dir', () => {
-    const projects = discoverProjects(process.env.HOME);
-    const names = projects.map(p => p.name);
-    assert.ok(names.some(n => n === 'docs'));
+  it('finds git repos, including nested ones, and skips non-repos', () => {
+    const names = discoverProjects([root]).map(p => p.name);
+    assert.ok(names.includes('alpha'), 'should find a top-level repo');
+    assert.ok(names.includes('beta'), 'should find a nested repo');
+    assert.ok(!names.includes('plain'), 'should not include a dir without .git');
   });
 
-  it('extracts project name from directory', () => {
-    const projects = discoverProjects(process.env.HOME);
-    const doc = projects.find(p => p.name === 'docs');
-    assert.ok(doc);
-    assert.ok(doc.path.endsWith('docs'));
+  it('extracts project name from directory path', () => {
+    const alpha = discoverProjects([root]).find(p => p.name === 'alpha');
+    assert.ok(alpha);
+    assert.ok(alpha.path.endsWith('alpha'));
   });
 });
 
 describe('matchProject', () => {
   it('matches by path prefix', () => {
     const projects = [
-      { name: 'superpowers', path: '/home/dynomatic/.codex/superpowers' },
-      { name: 'token-dashboard', path: '/home/dynomatic/opencode/projects/token-dashboard' },
+      { name: 'other-proj', path: '/home/u/other-proj' },
+      { name: 'token-dashboard', path: '/home/u/opencode/projects/token-dashboard' },
     ];
     assert.strictEqual(
-      matchProject('/home/dynomatic/opencode/projects/token-dashboard/packages/ingest', projects),
+      matchProject('/home/u/opencode/projects/token-dashboard/packages/ingest', projects),
       'token-dashboard'
     );
   });
 
+  it('requires a path-segment boundary (no partial-prefix match)', () => {
+    const projects = [{ name: 'foo', path: '/home/u/foo' }];
+    assert.strictEqual(matchProject('/home/u/foobar/src', projects), 'other');
+  });
+
   it('returns "other" for no match', () => {
-    assert.strictEqual(
-      matchProject('/some/random/dir', []),
-      'other'
-    );
+    assert.strictEqual(matchProject('/some/random/dir', []), 'other');
   });
 });

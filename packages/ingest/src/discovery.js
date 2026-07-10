@@ -23,12 +23,15 @@ function scanDir(dir, depth, results, seen) {
   }
 }
 
-export function discoverProjects() {
-  const roots = [
+export function defaultRoots() {
+  return [
     os.homedir(),
     path.join(os.homedir(), 'projects'),
     path.join(os.homedir(), 'opencode', 'projects'),
   ];
+}
+
+export function discoverProjects(roots = defaultRoots()) {
   const projects = [];
   const seen = new Set();
   for (const root of roots) {
