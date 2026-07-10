@@ -30,15 +30,14 @@ function parseTranscriptFile(filePath) {
   const lines = content.trim().split('\n');
 
   let firstTimestamp = null;
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheReadTokens = 0;
-  let cacheWriteTokens = 0;
-  const modelTokens = new Map();
   // A single transcript folder can hold sessions from several cwds, and a user
   // may `cd` mid-session, so pick the dominant (most frequent) cwd rather than
   // the first one seen.
   const cwdCounts = new Map();
+  // Claude Code streams each assistant message, logging it under the same
+  // message.id more than once (partial chunks + final). Summing every line
+  // double-counts tokens (~2x), so keep only the highest-usage entry per id.
+  const usageById = new Map();
 
   for (const line of lines) {
     let entry;
@@ -60,19 +59,31 @@ function parseTranscriptFile(filePath) {
     const usage = entry.message.usage;
     if (!usage) continue;
 
-    const model = entry.message.model || 'unknown';
-    const tokInput = usage.input_tokens || 0;
-    const tokOutput = usage.output_tokens || 0;
-    const tokCacheRead = usage.cache_read_input_tokens || 0;
-    const tokCacheWrite = usage.cache_creation_input_tokens || 0;
+    const tok = {
+      model: entry.message.model || 'unknown',
+      input: usage.input_tokens || 0,
+      output: usage.output_tokens || 0,
+      cacheRead: usage.cache_read_input_tokens || 0,
+      cacheWrite: usage.cache_creation_input_tokens || 0,
+    };
+    // Entries without an id can't be deduped — key them uniquely by line.
+    const id = entry.message.id || `line-${usageById.size}`;
+    const total = tok.input + tok.output + tok.cacheRead + tok.cacheWrite;
+    const existing = usageById.get(id);
+    if (!existing || total > existing.total) usageById.set(id, { ...tok, total });
+  }
 
-    inputTokens += tokInput;
-    outputTokens += tokOutput;
-    cacheReadTokens += tokCacheRead;
-    cacheWriteTokens += tokCacheWrite;
-
-    const total = tokInput + tokOutput + tokCacheRead + tokCacheWrite;
-    modelTokens.set(model, (modelTokens.get(model) || 0) + total);
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
+  const modelTokens = new Map();
+  for (const t of usageById.values()) {
+    inputTokens += t.input;
+    outputTokens += t.output;
+    cacheReadTokens += t.cacheRead;
+    cacheWriteTokens += t.cacheWrite;
+    modelTokens.set(t.model, (modelTokens.get(t.model) || 0) + t.total);
   }
 
   let model = 'unknown';

@@ -69,7 +69,9 @@ export default function SessionsTable({ sessions, delay = 0, onSelect }) {
                       {formatTokens(s.inputTokens + s.outputTokens + (s.cacheReadTokens || 0) + (s.cacheWriteTokens || 0))}
                     </td>
                     <td style={{ padding: '12px 20px', fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600, color: 'var(--color-accent)' }}>
-                      {formatCost(s.cost)}
+                      <span title={s.costEstimated ? 'Estimated from token usage × model pricing' : undefined}>
+                        {s.costEstimated ? '~' : ''}{formatCost(s.cost)}
+                      </span>
                     </td>
                   </tr>
                 ))}
