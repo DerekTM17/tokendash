@@ -4,9 +4,9 @@ export default function SummaryCards({ totals, delay = 0 }) {
   if (!totals) return null;
 
   const cards = [
-    { label: 'Total cost', value: formatCost(totals.cost) },
-    { label: 'Tokens', value: formatTokens(totals.tokens) },
-    { label: 'Sessions', value: String(totals.sessions) },
+    { key: 'COST', label: 'total cost', value: formatCost(totals.cost), color: 'var(--color-cost)', glow: 'rgba(255,138,61,0.5)' },
+    { key: 'TOK', label: 'tokens', value: formatTokens(totals.tokens), color: 'var(--cyan)', glow: 'rgba(0,180,255,0.5)' },
+    { key: 'SESS', label: 'sessions', value: String(totals.sessions), color: 'var(--color-text)', glow: 'rgba(0,180,255,0.35)' },
   ];
 
   return (
@@ -14,35 +14,39 @@ export default function SummaryCards({ totals, delay = 0 }) {
       {cards.map(card => (
         <div key={card.label} className="flex-1 animate-in">
           <div
+            className="bracket"
             style={{
               background: 'var(--color-card)',
-              borderRadius: 14,
+              borderRadius: 12,
               border: '1px solid var(--color-border)',
-              padding: '20px 24px',
+              padding: '22px 24px 20px',
+              position: 'relative',
+              overflow: 'hidden',
             }}
           >
+            <div className="hud-label" style={{ fontSize: 9, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+              {card.key}
+            </div>
             <div
+              className="mono"
               style={{
-                fontFamily: "'Playfair Display', serif",
-                fontSize: 36,
+                fontSize: 38,
                 fontWeight: 600,
-                color: 'var(--color-text)',
-                lineHeight: 1.1,
+                color: card.color,
+                lineHeight: 1,
                 letterSpacing: '-0.01em',
+                textShadow: `0 0 22px ${card.glow}`,
               }}
             >
               {card.value}
             </div>
             <div
+              className="hud-label"
               style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: 11,
-                fontWeight: 500,
+                fontSize: 10,
                 color: 'var(--color-text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                marginTop: 8,
-                paddingTop: 8,
+                marginTop: 12,
+                paddingTop: 10,
                 borderTop: '1px solid var(--color-border-light)',
               }}
             >

@@ -22,7 +22,7 @@ function groupByDayAndTool(sessions) {
 }
 
 const toolNames = ['claude', 'opencode', 'codex'];
-const toolColors = { claude: '#22d3ee', opencode: '#a78bfa', codex: '#34d399' };
+const toolColors = { claude: '#5cc8ff', opencode: '#b48cff', codex: '#34e6a4' };
 
 const CustomTooltip = ({ active, payload, label, metric }) => {
   if (!active || !payload?.length) return null;
@@ -33,7 +33,7 @@ const CustomTooltip = ({ active, payload, label, metric }) => {
 
   return (
     <div style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '12px 16px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minWidth: 190 }}>
-      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>{date}</div>
+      <div style={{ fontFamily: "var(--f-body)", fontSize: 12, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>{date}</div>
       {toolNames.map(tool => {
         const value = metric === 'cost' ? day[tool + 'Cost'] : day[tool];
         if (!value) return null;
@@ -41,15 +41,15 @@ const CustomTooltip = ({ active, payload, label, metric }) => {
           <div key={tool} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 6, height: 6, borderRadius: 3, background: toolColors[tool], flexShrink: 0 }} />
-              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: 'var(--color-text)', fontWeight: 500 }}>{tool}</span>
+              <span style={{ fontFamily: "var(--f-body)", fontSize: 11, color: 'var(--color-text)', fontWeight: 500 }}>{tool}</span>
             </div>
-            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: 'var(--color-text)', fontWeight: 500 }}>{fmt(value)}</span>
+            <span style={{ fontFamily: "var(--f-body)", fontSize: 11, color: 'var(--color-text)', fontWeight: 500 }}>{fmt(value)}</span>
           </div>
         );
       })}
       <div style={{ borderTop: '1px solid var(--color-border-light)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: 'var(--color-text)', fontWeight: 600 }}>Total</span>
-        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: 'var(--color-text)', fontWeight: 600 }}>{fmt(metric === 'cost' ? day.cost : day.tokens)}</span>
+        <span style={{ fontFamily: "var(--f-body)", fontSize: 11, color: 'var(--color-text)', fontWeight: 600 }}>Total</span>
+        <span style={{ fontFamily: "var(--f-body)", fontSize: 11, color: 'var(--color-text)', fontWeight: 600 }}>{fmt(metric === 'cost' ? day.cost : day.tokens)}</span>
       </div>
     </div>
   );
@@ -60,7 +60,7 @@ const renderLegend = ({ payload }) => (
     {payload.map((entry, i) => (
       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
         <div style={{ width: 7, height: 7, borderRadius: '50%', background: entry.color }} />
-        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>{entry.value}</span>
+        <span style={{ fontFamily: "var(--f-body)", fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>{entry.value}</span>
       </div>
     ))}
   </div>
@@ -71,15 +71,18 @@ function ToggleButton({ active, onClick, children }) {
     <button
       onClick={onClick}
       style={{
-        fontFamily: "'DM Sans', sans-serif",
-        fontSize: 12,
-        fontWeight: 500,
+        fontFamily: 'var(--f-mono)',
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
         padding: '4px 12px',
-        borderRadius: 7,
+        borderRadius: 6,
         border: 'none',
         cursor: 'pointer',
-        color: active ? 'var(--color-card)' : 'var(--color-text-secondary)',
-        background: active ? 'var(--color-accent)' : 'transparent',
+        color: active ? 'var(--void)' : 'var(--color-text-secondary)',
+        background: active ? 'var(--cyan)' : 'transparent',
+        boxShadow: active ? '0 0 14px rgba(0,180,255,0.5)' : 'none',
         transition: 'all 0.15s ease',
       }}
     >
@@ -100,7 +103,7 @@ export default function UsageChart({ sessions, delay = 0 }) {
     <div className="animate-in" style={{ animationDelay: `${delay}ms` }}>
       <div style={{ background: 'var(--color-card)', borderRadius: 14, border: '1px solid var(--color-border)', padding: '20px 20px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 600, color: 'var(--color-text)', letterSpacing: '-0.01em' }}>
+          <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
             Usage over time
           </div>
           <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 9, background: 'var(--color-detail-bg)', border: '1px solid var(--color-border)' }}>
@@ -110,7 +113,7 @@ export default function UsageChart({ sessions, delay = 0 }) {
         </div>
         {data.length === 0 ? (
           <div style={{ padding: '32px 0', textAlign: 'center' }}>
-            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: 'var(--color-text-muted)' }}>No data</span>
+            <span style={{ fontFamily: "var(--f-body)", fontSize: 13, color: 'var(--color-text-muted)' }}>No data</span>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
@@ -126,14 +129,14 @@ export default function UsageChart({ sessions, delay = 0 }) {
               <CartesianGrid vertical={false} stroke="var(--color-border-light)" />
               <XAxis
                 dataKey="day"
-                tick={{ fontSize: 10, fill: 'var(--color-text-muted)', fontFamily: "'DM Sans', sans-serif" }}
+                tick={{ fontSize: 10, fill: 'var(--color-text-muted)', fontFamily: "var(--f-body)" }}
                 tickLine={false}
                 axisLine={{ stroke: 'var(--color-border)' }}
                 minTickGap={40}
                 tickFormatter={d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               />
               <YAxis
-                tick={{ fontSize: 10, fill: 'var(--color-text-muted)', fontFamily: "'DM Sans', sans-serif" }}
+                tick={{ fontSize: 10, fill: 'var(--color-text-muted)', fontFamily: "var(--f-body)" }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={fmtAxis}

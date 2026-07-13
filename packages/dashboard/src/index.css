@@ -1,74 +1,141 @@
 @import "tailwindcss";
 
+/* TOKENDASH — dark tech-noir / HUD aesthetic
+ * void field, cyan glow, hot-orange accent. Chakra Petch display +
+ * JetBrains Mono readouts + Inter prose. Kin to the ledger / ATTRACTOR sites.
+ * The existing components read --color-* variables, so the palette is mapped
+ * onto those names — remapping here reskins the whole app. */
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --color-bg: #FAFAF7;
-  --color-card: #fff;
-  --color-hover: #F5F3EE;
-  --color-text: #1B2A4A;
-  --color-text-secondary: #64748B;
-  --color-text-muted: #94A3B8;
-  --color-accent: #7b9b82;
-  --color-header: #1B2A4A;
-  --color-border: #E2E8F0;
-  --color-border-light: #F1F5F9;
-  --color-detail-bg: #F8F7F4;
-  --color-tool-claude: #22d3ee;
-  --color-tool-opencode: #a78bfa;
-  --color-tool-codex: #34d399;
+  /* ── void field ── */
+  --void:        #010509;
+  --void-mid:    #020a14;
+  --void-light:  #041020;
+
+  /* ── glow / ink ── */
+  --glow:        #00b4ff;        /* glows, borders, shadows ONLY — never text */
+  --glow-rgb:    0, 180, 255;
+  --cyan:        #5cc8ff;        /* readable neon-cyan (~10:1 on void) */
+  --hot:         #ff6a00;        /* hot-orange accent (money / emphasis) */
+  --hot-soft:    #ffb070;
+  --mint:        #34e6a4;
+
+  /* component-facing names (used across all .jsx inline styles) */
+  --color-bg:             var(--void);
+  --color-card:           rgba(6, 20, 34, 0.72);
+  --color-hover:          rgba(0, 180, 255, 0.08);
+  --color-text:           #e4f1fb;   /* primary   ~15:1 */
+  --color-text-secondary: #aecadb;   /* secondary ~10:1 */
+  --color-text-muted:     #7f9cae;   /* tertiary  ~6:1 */
+  --color-accent:         #5cc8ff;   /* primary data highlight (cyan) */
+  --color-cost:           #ff8a3d;   /* cost / money readouts (orange) */
+  --color-header:         #010509;
+  --color-border:         rgba(0, 180, 255, 0.16);
+  --color-border-light:   rgba(0, 180, 255, 0.07);
+  --color-detail-bg:      #04101d;
+
+  /* tool series — glow on void */
+  --color-tool-claude:   #5cc8ff;
+  --color-tool-opencode: #b48cff;
+  --color-tool-codex:    #34e6a4;
+
+  --f-display: 'Chakra Petch', 'Rajdhani', system-ui, sans-serif;
+  --f-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --f-body:    'Inter', system-ui, sans-serif;
+
+  --track-wide:  0.15em;
+  --track-ultra: 0.30em;
 }
 
-[data-theme="dark"] {
-  --color-bg: #111318;
-  --color-card: #1a1d25;
-  --color-hover: #22262f;
-  --color-text: #e8e4dd;
-  --color-text-secondary: #9e9a93;
-  --color-text-muted: #6b6762;
-  --color-accent: #8bb595;
-  --color-header: #0d1014;
-  --color-border: rgba(255,255,255,0.08);
-  --color-border-light: rgba(255,255,255,0.05);
-  --color-detail-bg: #13151c;
-}
+html { background: var(--void); }
 
 body {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--f-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--color-bg);
   color: var(--color-text);
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--void-light) 0%, var(--void) 55%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
+
+/* ─── ambient chrome (fixed, behind content) ─────────────────────── */
+.grid-bg, .scanlines, .vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(var(--glow-rgb), 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--glow-rgb), 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(120% 90% at 50% 0%, #000 40%, transparent 85%);
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 0%, #000 40%, transparent 85%);
+}
+.scanlines {
+  background: repeating-linear-gradient(
+    0deg, rgba(0, 0, 0, 0.16) 0px, rgba(0, 0, 0, 0.16) 1px, transparent 2px, transparent 3px);
+  opacity: 0.35;
+}
+.vignette {
+  background: radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* HUD utility bits */
+.hud-label {
+  font-family: var(--f-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--track-wide);
+  font-weight: 500;
+}
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* a thin corner-bracket frame for panels */
+.bracket {
+  position: relative;
+}
+.bracket::before, .bracket::after {
+  content: '';
+  position: absolute;
+  width: 10px; height: 10px;
+  border: 1px solid var(--glow);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.bracket::before { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
+.bracket::after  { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes expandDown {
   from { opacity: 0; max-height: 0; }
   to { opacity: 1; max-height: 600px; }
 }
-
-.animate-in {
-  opacity: 0;
-  animation: fadeUp 0.5s ease-out forwards;
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52, 230, 164, 0.6); }
+  50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(52, 230, 164, 0); }
 }
 
-.expand-enter {
-  animation: expandDown 0.3s ease-out forwards;
-  overflow: hidden;
-}
+.animate-in { opacity: 0; animation: fadeUp 0.5s ease-out forwards; }
+.expand-enter { animation: expandDown 0.3s ease-out forwards; overflow: hidden; }
 
-.row-zen {
-  transition: background-color 0.12s ease;
-}
+.row-zen { transition: background-color 0.12s ease, box-shadow 0.12s ease; }
 .row-zen:hover {
   background-color: var(--color-hover);
+  box-shadow: inset 2px 0 0 var(--glow);
 }
 
-::-webkit-scrollbar { width: 4px; }
+::selection { background: rgba(255, 106, 0, 0.85); color: var(--void); }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+::-webkit-scrollbar-thumb { background: rgba(var(--glow-rgb), 0.25); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(var(--glow-rgb), 0.5); }

@@ -18,37 +18,43 @@ export default function ProjectBreakdown({ sessions, delay = 0, onSelect }) {
 
   return (
     <div className="animate-in" style={{ animationDelay: `${delay}ms` }}>
-      <div style={{ background: 'var(--color-card)', borderRadius: 14, border: '1px solid var(--color-border)', padding: '20px' }}>
-        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 600, color: 'var(--color-text)', marginBottom: 16, letterSpacing: '-0.01em' }}>
+      <div style={{ background: 'var(--color-card)', borderRadius: 12, border: '1px solid var(--color-border)', padding: '20px' }}>
+        <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', marginBottom: 18, textTransform: 'uppercase', letterSpacing: '0.16em' }}>
           By project
         </div>
         {data.length === 0 ? (
-          <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: 'var(--color-text-muted)' }}>No data</span>
+          <span style={{ fontFamily: 'var(--f-body)', fontSize: 13, color: 'var(--color-text-muted)' }}>No data</span>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {data.map(d => (
-              <div key={d.project} onClick={() => onSelect?.(d.project)} style={{ cursor: onSelect ? 'pointer' : 'default' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>{d.project}</span>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: 'var(--color-text-muted)' }}>{d.sessions}</span>
-                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600, color: 'var(--color-accent)', minWidth: 56, textAlign: 'right' }}>
-                      {formatCost(d.cost)}
-                    </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {data.map(d => {
+              const other = d.project === 'other';
+              const c = other ? 'var(--color-text-muted)' : 'var(--glow)';
+              return (
+                <div key={d.project} onClick={() => onSelect?.(d.project)} style={{ cursor: onSelect ? 'pointer' : 'default' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 10 }}>
+                    <span style={{ fontFamily: 'var(--f-body)', fontSize: 13, fontWeight: 500, color: other ? 'var(--color-text-muted)' : 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.project}</span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexShrink: 0 }}>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{d.sessions}</span>
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-cost)', minWidth: 60, textAlign: 'right' }}>
+                        {formatCost(d.cost)}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ height: 2, width: '100%', background: 'rgba(0,180,255,0.07)', borderRadius: 2 }}>
+                    <div
+                      style={{
+                        height: 2,
+                        width: `${Math.max((d.cost / max) * 100, 2)}%`,
+                        background: c,
+                        borderRadius: 2,
+                        boxShadow: other ? 'none' : '0 0 7px rgba(0,180,255,0.7)',
+                        transition: 'width 0.5s ease-out',
+                      }}
+                    />
                   </div>
                 </div>
-                <div style={{ height: 1, width: '100%', background: 'var(--color-border-light)' }}>
-                  <div
-                    style={{
-                      height: 1,
-                      width: `${Math.max((d.cost / max) * 100, 4)}%`,
-                      background: 'var(--color-accent)',
-                      transition: 'width 0.5s ease-out',
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

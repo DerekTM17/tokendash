@@ -22,26 +22,33 @@ export default function DateFilter({ onChange }) {
   };
 
   return (
-    <div style={{ display: 'flex', gap: 4, padding: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 8 }}>
-      {options.map(o => (
-        <button
-          key={o.value}
-          onClick={() => handleChange(o.value)}
-          style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontSize: 12,
-            fontWeight: selected === o.value ? 500 : 400,
-            color: selected === o.value ? '#fff' : 'rgba(255,255,255,0.5)',
-            background: selected === o.value ? 'rgba(255,255,255,0.12)' : 'transparent',
-            border: 'none',
-            borderRadius: 6,
-            padding: '5px 12px',
-            cursor: 'pointer',
-          }}
-        >
-          {o.label}
-        </button>
-      ))}
+    <div style={{ display: 'flex', gap: 3, padding: 3, background: 'rgba(0,180,255,0.06)', border: '1px solid var(--color-border)', borderRadius: 7 }}>
+      {options.map(o => {
+        const on = selected === o.value;
+        return (
+          <button
+            key={o.value}
+            onClick={() => handleChange(o.value)}
+            style={{
+              fontFamily: 'var(--f-mono)',
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: on ? 'var(--void)' : 'var(--color-text-muted)',
+              background: on ? 'var(--cyan)' : 'transparent',
+              boxShadow: on ? '0 0 12px rgba(0,180,255,0.45)' : 'none',
+              border: 'none',
+              borderRadius: 5,
+              padding: '5px 12px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

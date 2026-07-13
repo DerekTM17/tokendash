@@ -5,7 +5,7 @@ import App from '../src/App';
 describe('App', () => {
   it('renders the title', () => {
     render(<App />);
-    expect(screen.getByText('TokenDash')).toBeDefined();
+    expect(screen.getByText('TOKENDASH')).toBeDefined();
   });
 
   it('shows date filter buttons', () => {

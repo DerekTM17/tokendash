@@ -9,31 +9,34 @@ export default function SlidePanel({ open, onClose, children }) {
           position: 'fixed',
           inset: 0,
           zIndex: 40,
-          backgroundColor: 'rgba(0,0,0,0.4)',
+          backgroundColor: 'rgba(1,5,9,0.66)',
+          backdropFilter: 'blur(2px)',
         }}
       />
       <div
+        className="animate-in"
         style={{
           position: 'fixed',
           top: 0,
           right: 0,
           height: '100%',
           zIndex: 50,
-          width: 320,
+          width: 340,
           padding: 24,
           overflowY: 'auto',
-          backgroundColor: 'var(--color-card)',
-          borderLeft: '1px solid var(--color-border)',
+          background: 'var(--void-light)',
+          borderLeft: '1px solid var(--border-active, rgba(0,180,255,0.4))',
+          boxShadow: '-24px 0 60px -20px rgba(0,180,255,0.35)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            DETAIL
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <h3 className="hud-label" style={{ fontSize: 10, color: 'var(--cyan)' }}>
+            ▸ DETAIL
           </h3>
           <button
             onClick={onClose}
             style={{
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: "var(--f-body)",
               fontSize: 18,
               color: 'var(--color-text-muted)',
               background: 'transparent',

@@ -7,9 +7,9 @@ const sampleTotals = { cost: 42.18, tokens: 1200000, sessions: 47 };
 describe('SummaryCards', () => {
   it('renders three cards', () => {
     render(<SummaryCards totals={sampleTotals} />);
-    expect(screen.getByText('Total cost')).toBeDefined();
-    expect(screen.getByText('Tokens')).toBeDefined();
-    expect(screen.getByText('Sessions')).toBeDefined();
+    expect(screen.getByText('total cost')).toBeDefined();
+    expect(screen.getByText('tokens')).toBeDefined();
+    expect(screen.getByText('sessions')).toBeDefined();
   });
 
   it('displays formatted values', () => {
