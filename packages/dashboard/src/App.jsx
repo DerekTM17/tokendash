@@ -107,11 +107,11 @@ export default function App() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-8 space-y-6">
+            <div className="lg:col-span-8" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <UsageChart sessions={filtered} delay={200} />
               <SessionsTable sessions={filtered} delay={500} onSelect={setSelectedSession} />
             </div>
-            <div className="lg:col-span-4 space-y-6">
+            <div className="lg:col-span-4" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <ToolBreakdown sessions={filtered} delay={300} onSelect={(tool) => setSelectedGroup({ type: 'tool', value: tool, sessions: filtered.filter(s => s.tool === tool) })} />
               <ProjectBreakdown sessions={filtered} delay={400} onSelect={(proj) => setSelectedGroup({ type: 'project', value: proj, sessions: filtered.filter(s => s.project === proj) })} />
             </div>

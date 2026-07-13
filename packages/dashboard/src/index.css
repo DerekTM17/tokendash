@@ -4,9 +4,12 @@
  * void field, cyan glow, hot-orange accent. Chakra Petch display +
  * JetBrains Mono readouts + Inter prose. Kin to the ledger / ATTRACTOR sites.
  * The existing components read --color-* variables, so the palette is mapped
- * onto those names — remapping here reskins the whole app. */
-
-* { margin: 0; padding: 0; box-sizing: border-box; }
+ * onto those names — remapping here reskins the whole app.
+ *
+ * NB: do NOT add an unlayered `* { margin: 0 }` reset here — Tailwind's
+ * preflight already resets margins (in a layer), and an unlayered rule would
+ * override the layered `space-y-*` utilities (they use margin), collapsing the
+ * vertical gaps between stacked panels. */
 
 :root {
   /* ── void field ── */
