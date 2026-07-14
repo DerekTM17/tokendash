@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTokenData } from './hooks/useTokenData';
 import SummaryCards from './components/SummaryCards';
+import MetricsStrip from './components/MetricsStrip';
 import UsageChart from './components/UsageChart';
+import ActivityHeatmap from './components/ActivityHeatmap';
 import CostComposition from './components/CostComposition';
 import ToolBreakdown from './components/ToolBreakdown';
 import ModelBreakdown from './components/ModelBreakdown';
@@ -105,14 +107,18 @@ export default function App() {
         </header>
 
         <main style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px 80px' }}>
-          <div style={{ marginTop: 28, marginBottom: 22 }}>
+          <div style={{ marginTop: 28, marginBottom: 12 }}>
             <SummaryCards totals={filteredTotals} delay={0} />
+          </div>
+          <div style={{ marginBottom: 22 }}>
+            <MetricsStrip sessions={filtered} delay={80} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-8" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <UsageChart sessions={filtered} delay={200} />
               <CostComposition sessions={filtered} delay={250} />
+              <ActivityHeatmap sessions={filtered} delay={280} />
               <SessionsTable sessions={filtered} delay={500} onSelect={setSelectedSession} />
             </div>
             <div className="lg:col-span-4" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
