@@ -38,20 +38,23 @@ export function priceForModel(model) {
   return best;
 }
 
+// Breaks a session's estimated cost into its four token components (USD), or
+// null when the model isn't priceable. The four parts sum to estimateCost().
+export function costBreakdown(session) {
+  const rate = priceForModel(session.model);
+  if (!rate) return null;
+  return {
+    input: ((session.inputTokens || 0) * rate.input) / 1_000_000,
+    output: ((session.outputTokens || 0) * rate.output) / 1_000_000,
+    cacheRead: ((session.cacheReadTokens || 0) * rate.input * CACHE_READ_MULTIPLIER) / 1_000_000,
+    cacheWrite: ((session.cacheWriteTokens || 0) * rate.input * CACHE_WRITE_MULTIPLIER) / 1_000_000,
+  };
+}
+
 // Returns the estimated cost in USD for a session's token usage, or null when
 // the model isn't in the pricing table (caller keeps whatever cost it had).
 export function estimateCost(session) {
-  const rate = priceForModel(session.model);
-  if (!rate) return null;
-  const input = session.inputTokens || 0;
-  const output = session.outputTokens || 0;
-  const cacheRead = session.cacheReadTokens || 0;
-  const cacheWrite = session.cacheWriteTokens || 0;
-  const dollars =
-    (input * rate.input +
-      output * rate.output +
-      cacheRead * rate.input * CACHE_READ_MULTIPLIER +
-      cacheWrite * rate.input * CACHE_WRITE_MULTIPLIER) /
-    1_000_000;
-  return dollars;
+  const parts = costBreakdown(session);
+  if (!parts) return null;
+  return parts.input + parts.output + parts.cacheRead + parts.cacheWrite;
 }

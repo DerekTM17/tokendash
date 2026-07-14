@@ -2,9 +2,12 @@ import { useState, useMemo, useEffect } from 'react';
 import { useTokenData } from './hooks/useTokenData';
 import SummaryCards from './components/SummaryCards';
 import UsageChart from './components/UsageChart';
+import CostComposition from './components/CostComposition';
 import ToolBreakdown from './components/ToolBreakdown';
+import ModelBreakdown from './components/ModelBreakdown';
 import ProjectBreakdown from './components/ProjectBreakdown';
 import SessionsTable from './components/SessionsTable';
+import ExpensiveSessions from './components/ExpensiveSessions';
 import DateFilter, { filterSessions } from './components/DateFilter';
 import SlidePanel from './components/SlidePanel';
 import SessionDetail from './components/SessionDetail';
@@ -109,11 +112,14 @@ export default function App() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-8" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <UsageChart sessions={filtered} delay={200} />
+              <CostComposition sessions={filtered} delay={250} />
               <SessionsTable sessions={filtered} delay={500} onSelect={setSelectedSession} />
             </div>
             <div className="lg:col-span-4" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <ToolBreakdown sessions={filtered} delay={300} onSelect={(tool) => setSelectedGroup({ type: 'tool', value: tool, sessions: filtered.filter(s => s.tool === tool) })} />
+              <ModelBreakdown sessions={filtered} delay={350} />
               <ProjectBreakdown sessions={filtered} delay={400} onSelect={(proj) => setSelectedGroup({ type: 'project', value: proj, sessions: filtered.filter(s => s.project === proj) })} />
+              <ExpensiveSessions sessions={filtered} delay={450} onSelect={setSelectedSession} />
             </div>
           </div>
         </main>

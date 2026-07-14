@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { priceForModel, estimateCost } from '../src/pricing.js';
+import { priceForModel, estimateCost, costBreakdown } from '../src/pricing.js';
 
 describe('priceForModel', () => {
   it('resolves a known model', () => {
@@ -44,5 +44,22 @@ describe('estimateCost', () => {
 
   it('handles missing token fields as zero', () => {
     assert.strictEqual(estimateCost({ model: 'claude-haiku-4-5' }), 0);
+  });
+});
+
+describe('costBreakdown', () => {
+  it('splits cost into four parts that sum to estimateCost', () => {
+    const s = { model: 'claude-opus-4-8', inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000, cacheWriteTokens: 1_000_000 };
+    const parts = costBreakdown(s);
+    assert.strictEqual(Number(parts.input.toFixed(4)), 5);
+    assert.strictEqual(Number(parts.output.toFixed(4)), 25);
+    assert.strictEqual(Number(parts.cacheRead.toFixed(4)), 0.5);
+    assert.strictEqual(Number(parts.cacheWrite.toFixed(4)), 6.25);
+    const sum = parts.input + parts.output + parts.cacheRead + parts.cacheWrite;
+    assert.strictEqual(Number(sum.toFixed(4)), Number(estimateCost(s).toFixed(4)));
+  });
+
+  it('returns null for an unpriceable model', () => {
+    assert.strictEqual(costBreakdown({ model: 'gpt-5.6-terra', inputTokens: 100 }), null);
   });
 });
