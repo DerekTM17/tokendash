@@ -24,10 +24,10 @@ export default function SessionsTable({ sessions, delay = 0, onSelect }) {
             <span style={{ fontFamily: 'var(--f-body)', fontSize: 13, color: 'var(--color-text-muted)' }}>No sessions yet</span>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <div data-testid="sessions-scroll" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 520 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <tr>
                   {headers.map((h, i) => (
                     <th
                       key={h}
@@ -37,6 +37,15 @@ export default function SessionsTable({ sessions, delay = 0, onSelect }) {
                         padding: '9px 20px',
                         fontSize: 9,
                         color: 'var(--color-text-muted)',
+                        // Sticky inside the scroll container; opaque background so
+                        // rows slide underneath instead of showing through. The
+                        // border moves to box-shadow because table borders don't
+                        // travel with sticky cells.
+                        position: 'sticky',
+                        top: 0,
+                        background: 'var(--color-card)',
+                        boxShadow: 'inset 0 -1px 0 var(--color-border)',
+                        zIndex: 1,
                       }}
                     >
                       {h}

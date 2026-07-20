@@ -18,4 +18,19 @@ describe('SessionsTable', () => {
     render(<SessionsTable sessions={[]} />);
     expect(screen.getByText('No sessions yet')).toBeDefined();
   });
+
+  it('contains rows in a vertically scrollable body instead of growing the page', () => {
+    const { container } = render(<SessionsTable sessions={sessions} />);
+    const scroller = container.querySelector('[data-testid="sessions-scroll"]');
+    expect(scroller).not.toBeNull();
+    expect(scroller.style.overflowY).toBe('auto');
+    expect(scroller.style.maxHeight).not.toBe('');
+  });
+
+  it('keeps header cells sticky inside the scroll container', () => {
+    const { container } = render(<SessionsTable sessions={sessions} />);
+    const th = container.querySelector('th');
+    expect(th.style.position).toBe('sticky');
+    expect(th.style.top).toBe('0px');
+  });
 });

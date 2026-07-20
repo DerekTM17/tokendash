@@ -14,6 +14,7 @@ import ExpensiveSessions from './components/ExpensiveSessions';
 import DateFilter, { filterSessions } from './components/DateFilter';
 import SlidePanel from './components/SlidePanel';
 import SessionDetail from './components/SessionDetail';
+import GroupDetail from './components/GroupDetail';
 
 function LiveIndicator({ generated }) {
   const [now, setNow] = useState(Date.now());
@@ -151,6 +152,7 @@ export default function App() {
             <div className="mono" style={{ fontSize: 20, fontWeight: 600, color: 'var(--color-cost)' }}>
               ${(selectedGroup.sessions.reduce((sum, s) => sum + (s.cost || 0), 0)).toFixed(2)}
             </div>
+            <GroupDetail sessions={selectedGroup.sessions} />
           </div>
         )}
       </SlidePanel>
