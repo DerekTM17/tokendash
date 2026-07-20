@@ -42,7 +42,11 @@ the parser is wrong, no matter what the test suite says. Fix the source, don't s
   WAL mode and may be open by a running opencode — open readonly.
 - **Codex** — `~/.codex/history.jsonl` is per-prompt text (`session_id`, `ts`, `text`), NO tokens.
   Real usage is in rollout files `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` (token_count events).
-  `ts` in history.jsonl is in **seconds** (×1000 for ms is correct).
+  `ts` in history.jsonl is in **seconds** (×1000 for ms is correct). The counters in
+  `total_token_usage` OVERLAP: `cached_input_tokens` ⊆ `input_tokens` and
+  `reasoning_output_tokens` ⊆ `output_tokens` (`total_tokens` = input + output, verified across
+  every live rollout event). Our buckets are disjoint — subtract cached from input, never add
+  reasoning to output, or tokens and cost double-count.
 
 ## Project discovery
 

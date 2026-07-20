@@ -16,11 +16,19 @@ describe('priceForModel', () => {
     assert.deepStrictEqual(priceForModel('claude-opus-4-8'), { input: 5, output: 25 });
   });
 
-  it('returns null for unknown / non-Claude models', () => {
+  it('returns null for unknown models', () => {
     assert.strictEqual(priceForModel('unknown'), null);
     assert.strictEqual(priceForModel('deepseek-v4-pro'), null);
     assert.strictEqual(priceForModel(''), null);
     assert.strictEqual(priceForModel(null), null);
+  });
+
+  it('resolves OpenAI GPT models (Codex sessions)', () => {
+    // developers.openai.com/api/docs/pricing, checked 2026-07-20
+    assert.deepStrictEqual(priceForModel('gpt-5.6-sol'), { input: 5, output: 30 });
+    assert.deepStrictEqual(priceForModel('gpt-5.6-terra'), { input: 2.5, output: 15 });
+    assert.deepStrictEqual(priceForModel('gpt-5.6-luna'), { input: 1, output: 6 });
+    assert.deepStrictEqual(priceForModel('gpt-5.5'), { input: 5, output: 30 });
   });
 });
 
@@ -60,6 +68,19 @@ describe('costBreakdown', () => {
   });
 
   it('returns null for an unpriceable model', () => {
-    assert.strictEqual(costBreakdown({ model: 'gpt-5.6-terra', inputTokens: 100 }), null);
+    assert.strictEqual(costBreakdown({ model: 'deepseek-v4-pro', inputTokens: 100 }), null);
+  });
+
+  it('prices a Codex GPT session (cached input at 0.1x, no cache writes)', () => {
+    const cost = estimateCost({
+      model: 'gpt-5.6-sol',
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      cacheReadTokens: 1_000_000,
+      cacheWriteTokens: 0,
+    });
+    // 5 + 30 + 0.5 = 35.5 — OpenAI's cached-input rate is exactly 0.1x input,
+    // same discount the table already applies for Anthropic cache reads.
+    assert.strictEqual(Number(cost.toFixed(4)), 35.5);
   });
 });

@@ -1,6 +1,7 @@
 // Per-model token pricing so we can derive cost for tools that record tokens but
-// not dollars (Claude transcripts carry usage, not cost). Rates are USD per
-// million tokens, from the Anthropic pricing table. Cache tokens follow the
+// not dollars (Claude transcripts and Codex rollouts carry usage, not cost).
+// Rates are USD per million tokens, from the Anthropic and OpenAI pricing
+// pages. Cache tokens follow the
 // standard multipliers: cache reads bill at ~0.1x input, 5-minute cache writes
 // at 1.25x input.
 //
@@ -20,6 +21,13 @@ const PRICING = {
   'claude-sonnet-4-5': { input: 3, output: 15 },
   'claude-sonnet-4': { input: 3, output: 15 },
   'claude-haiku-4-5': { input: 1, output: 5 },
+  // OpenAI (Codex sessions) — developers.openai.com/api/docs/pricing, 2026-07-20.
+  // Cached input bills at exactly 0.1x input, so CACHE_READ_MULTIPLIER applies
+  // unchanged; Codex never emits cacheWriteTokens, so the write multiplier is moot.
+  'gpt-5.6-sol': { input: 5, output: 30 },
+  'gpt-5.6-terra': { input: 2.5, output: 15 },
+  'gpt-5.6-luna': { input: 1, output: 6 },
+  'gpt-5.5': { input: 5, output: 30 },
 };
 
 const CACHE_READ_MULTIPLIER = 0.1;

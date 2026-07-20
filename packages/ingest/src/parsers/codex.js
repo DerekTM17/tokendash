@@ -67,13 +67,20 @@ function parseRolloutFile(filePath) {
     }
   }
 
+  // Codex reports overlapping counters: cached_input_tokens is a SUBSET of
+  // input_tokens, and reasoning_output_tokens a SUBSET of output_tokens
+  // (total_tokens === input + output in every observed rollout event). Our
+  // buckets are disjoint (Claude-transcript semantics), so subtract cached
+  // out of input and take output as-is — adding reasoning would double-count.
+  const input = lastTokenUsage?.input_tokens || 0;
+  const cached = lastTokenUsage?.cached_input_tokens || 0;
   return {
     cwd,
     model,
     firstTimestamp,
-    inputTokens: lastTokenUsage?.input_tokens || 0,
-    outputTokens: (lastTokenUsage?.output_tokens || 0) + (lastTokenUsage?.reasoning_output_tokens || 0),
-    cacheReadTokens: lastTokenUsage?.cached_input_tokens || 0,
+    inputTokens: Math.max(0, input - cached),
+    outputTokens: lastTokenUsage?.output_tokens || 0,
+    cacheReadTokens: cached,
     cacheWriteTokens: 0,
   };
 }
