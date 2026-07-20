@@ -12,6 +12,9 @@ function scanDir(dir, depth, results, seen) {
   }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    // Hidden dirs hold tool machinery (~/.codex plugins, ~/.claude, caches) —
+    // git repos in there are not user projects and pollute attribution.
+    if (entry.name.startsWith('.')) continue;
     const fullPath = path.join(dir, entry.name);
     if (seen.has(fullPath)) continue;
     seen.add(fullPath);

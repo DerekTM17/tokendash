@@ -27,6 +27,13 @@ function walkRolloutFiles(sessionsDir) {
   return results;
 }
 
+// Absolute paths that show up in transcript content (shell commands, file
+// reads). Codex is often launched from $HOME, where cwd says nothing about the
+// project — but the paths the session actually touched do. Character class
+// stops at JSON escapes/quotes; trailing punctuation is trimmed below.
+const PATH_REF_RE = /\/(?:home|Users)\/[A-Za-z0-9._~-][A-Za-z0-9._~/-]*/g;
+const MAX_PATH_REFS = 10000;
+
 function parseRolloutFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.trim().split('\n');
@@ -35,8 +42,17 @@ function parseRolloutFile(filePath) {
   let model = 'unknown';
   let firstTimestamp = null;
   let lastTokenUsage = null;
+  const contentPathRefs = {};
+  let pathRefCount = 0;
 
   for (const line of lines) {
+    if (pathRefCount < MAX_PATH_REFS) {
+      for (const match of line.matchAll(PATH_REF_RE)) {
+        const ref = match[0].replace(/[/.]+$/, '');
+        contentPathRefs[ref] = (contentPathRefs[ref] || 0) + 1;
+        if (++pathRefCount >= MAX_PATH_REFS) break;
+      }
+    }
     let entry;
     try {
       entry = JSON.parse(line);
@@ -82,6 +98,7 @@ function parseRolloutFile(filePath) {
     outputTokens: lastTokenUsage?.output_tokens || 0,
     cacheReadTokens: cached,
     cacheWriteTokens: 0,
+    contentPathRefs,
   };
 }
 
@@ -112,6 +129,7 @@ export function parseCodexData(codexDir) {
       outputTokens: transcript.outputTokens,
       cacheReadTokens: transcript.cacheReadTokens,
       cacheWriteTokens: transcript.cacheWriteTokens,
+      contentPathRefs: transcript.contentPathRefs,
       cost: 0,
       currency: 'USD',
     });

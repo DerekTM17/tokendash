@@ -51,8 +51,15 @@ the parser is wrong, no matter what the test suite says. Fix the source, don't s
 ## Project discovery
 
 `discoverProjects` must find nested repos, not just direct children of `$HOME` (real projects live
-under `~/projects/*` and `~/opencode/projects/*`). Match cwd→project with a path-separator boundary,
-not bare `startsWith` (else `/a/foobar` matches project `/a/foo`).
+under `~/projects/*` and `~/opencode/projects/*`), but must SKIP hidden dirs — `~/.codex`/`~/.claude`
+hold plugin/skill git repos that are tool machinery, not projects. Match cwd→project with a
+path-separator boundary, not bare `startsWith` (else `/a/foobar` matches project `/a/foo`).
+
+Sessions launched from `$HOME` (common with Codex) get a content-dominance fallback: the parser
+tallies absolute paths in the transcript and the normalizer attributes only on strong evidence
+(winner ≥3 refs AND majority-or-3x-runner-up), flagged `projectInferred` so the UI marks it (`~`).
+Ties/thin evidence stay "other" — verified correct against real sessions (a cross-project
+plugin-install session must NOT get pinned to the project it happened to mention most).
 
 ## Conventions
 

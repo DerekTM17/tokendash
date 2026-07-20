@@ -16,6 +16,11 @@ const FIXTURE_LINES = [
     type: 'turn_context',
     payload: { turn_id: 'turn-1', cwd: '/home/test/codex-project', model: 'gpt-5.5' }
   }),
+  JSON.stringify({
+    timestamp: '2026-04-29T13:22:34.000Z',
+    type: 'response_item',
+    payload: { type: 'function_call', arguments: '{"command":["bash","-lc","ls /home/test/projects/attractor/src && cat /home/test/projects/attractor/package.json"]}' }
+  }),
   // Real Codex semantics (verified against live rollouts, 158 events, 0 violations):
   // cached_input_tokens ⊆ input_tokens, reasoning_output_tokens ⊆ output_tokens,
   // total_tokens === input_tokens + output_tokens.
@@ -71,6 +76,11 @@ describe('codex parser integration', () => {
 
       const totalTokens = s.inputTokens + s.outputTokens + s.cacheReadTokens + s.cacheWriteTokens;
       assert.strictEqual(totalTokens, 14020, 'bucket sum equals Codex total_tokens');
+
+      // Absolute paths mentioned in the transcript are tallied so the
+      // normalizer can attribute home-dir-launched sessions to a project.
+      assert.strictEqual(s.contentPathRefs['/home/test/projects/attractor/src'], 1);
+      assert.strictEqual(s.contentPathRefs['/home/test/projects/attractor/package.json'], 1);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

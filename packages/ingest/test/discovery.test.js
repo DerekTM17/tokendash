@@ -13,6 +13,8 @@ before(() => {
   fs.mkdirSync(path.join(root, 'alpha', '.git'), { recursive: true });      // a git repo
   fs.mkdirSync(path.join(root, 'nested', 'beta', '.git'), { recursive: true }); // nested repo
   fs.mkdirSync(path.join(root, 'plain'), { recursive: true });               // not a repo
+  // Tool machinery, not user projects: repos under hidden dirs must not count
+  fs.mkdirSync(path.join(root, '.codex', 'superpowers', '.git'), { recursive: true });
 });
 after(() => {
   fs.rmSync(root, { recursive: true, force: true });
@@ -28,6 +30,11 @@ describe('discoverProjects', () => {
     assert.ok(names.includes('alpha'), 'should find a top-level repo');
     assert.ok(names.includes('beta'), 'should find a nested repo');
     assert.ok(!names.includes('plain'), 'should not include a dir without .git');
+  });
+
+  it('does not descend into hidden directories (tool config, not projects)', () => {
+    const names = discoverProjects([root]).map(p => p.name);
+    assert.ok(!names.includes('superpowers'), 'repos under dot-dirs are not user projects');
   });
 
   it('extracts project name from directory path', () => {

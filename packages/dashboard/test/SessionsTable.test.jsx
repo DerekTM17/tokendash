@@ -27,6 +27,13 @@ describe('SessionsTable', () => {
     expect(scroller.style.maxHeight).not.toBe('');
   });
 
+  it('marks inferred project attribution like estimated costs', () => {
+    const inferred = [{ ...sessions[0], project: 'attractor', projectInferred: true }];
+    render(<SessionsTable sessions={inferred} />);
+    const cell = screen.getByText('~attractor');
+    expect(cell.getAttribute('title')).toContain('Inferred');
+  });
+
   it('keeps header cells sticky inside the scroll container', () => {
     const { container } = render(<SessionsTable sessions={sessions} />);
     const th = container.querySelector('th');

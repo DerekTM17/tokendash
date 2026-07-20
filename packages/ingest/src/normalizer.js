@@ -35,6 +35,35 @@ export function normalize(sessions, projects) {
         project = s.project;
       }
 
+      // Content-dominance fallback: a session launched outside any project
+      // (Codex from $HOME) can still be attributed from the paths it touched —
+      // but only on strong evidence: the winner needs at least 3 references
+      // and either a strict majority of all project-resolving references or
+      // 3x the runner-up (the latter covers "listed every project once, then
+      // worked in one"). Ties and thin evidence honestly stay "other".
+      // Inferred labels are flagged so the UI never presents them as recorded
+      // fact.
+      let projectInferred = false;
+      if (project === 'other' && s.contentPathRefs) {
+        const tally = {};
+        let total = 0;
+        for (const [ref, count] of Object.entries(s.contentPathRefs)) {
+          const name = matchProject(ref, projects);
+          if (name === 'other') continue;
+          tally[name] = (tally[name] || 0) + count;
+          total += count;
+        }
+        const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+        if (ranked.length > 0) {
+          const [winner, count] = ranked[0];
+          const runnerUp = ranked[1]?.[1] || 0;
+          if (count >= 3 && (count > total / 2 || count >= 3 * runnerUp)) {
+            project = winner;
+            projectInferred = true;
+          }
+        }
+      }
+
       // Tools that report tokens but no cost (Claude transcripts) get a cost
       // derived from token usage x model pricing; source-reported cost wins.
       let cost = s.cost || 0;
@@ -55,6 +84,7 @@ export function normalize(sessions, projects) {
         id: s.id,
         tool: s.tool,
         project,
+        projectInferred,
         model: s.model || 'unknown',
         startedAt: s.startedAt || null,
         duration: s.duration || null,

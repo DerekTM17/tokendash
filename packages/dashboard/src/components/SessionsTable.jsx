@@ -73,7 +73,11 @@ export default function SessionsTable({ sessions, delay = 0, onSelect }) {
                         </span>
                       </td>
                       <td style={{ padding: '11px 20px', fontFamily: 'var(--f-body)', fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>
-                        {s.project}
+                        {s.projectInferred ? (
+                          <span title="Inferred from session content (launched outside a project directory)" style={{ color: 'var(--color-text-secondary)' }}>
+                            ~{s.project}
+                          </span>
+                        ) : s.project}
                       </td>
                       <td className="mono" style={{ padding: '11px 20px', fontSize: 11, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
                         {s.model}
