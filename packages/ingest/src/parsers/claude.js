@@ -25,6 +25,27 @@ function readClaudeConfig(filePath) {
   return bySessionId;
 }
 
+// Collect every .jsonl transcript that lives inside a `subagents` directory
+// anywhere beneath `root`. Delegated agents nest one level down per session,
+// and agents that delegate again nest deeper, so this walks recursively.
+function findSubagentTranscripts(root, inSubagents = false, out = []) {
+  let entries;
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      findSubagentTranscripts(full, inSubagents || entry.name === 'subagents', out);
+    } else if (inSubagents && entry.name.endsWith('.jsonl')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
 function parseTranscriptFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.trim().split('\n');
@@ -129,24 +150,20 @@ export function parseClaudeJSON(projectsDir) {
   const projDirs = fs.readdirSync(base, { withFileTypes: true }).filter(d => d.isDirectory());
   for (const projDir of projDirs) {
     const dirPath = path.join(base, projDir.name);
-    const files = fs.readdirSync(dirPath);
-    const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
 
-    for (const file of jsonlFiles) {
-      const sessionId = file.slice(0, -6);
-      const filePath = path.join(dirPath, file);
-
+    // Turn one transcript file into a session row. `config` supplies a
+    // recorded cost when we have one (top-level sessions matched by id);
+    // subagents have none, so cost stays 0 and the normalizer estimates it
+    // from tokens x model pricing.
+    const emit = (filePath, id, config = {}) => {
       let transcript;
       try {
         transcript = parseTranscriptFile(filePath);
       } catch {
-        continue;
+        return;
       }
-
-      const config = configBySession.get(sessionId) || {};
-
       sessions.push({
-        id: `claude_${sessionId}`,
+        id,
         tool: 'claude',
         // The transcript's own cwd is authoritative. Only fall back to the
         // config path or the folder-name decode (lossy — it turns any '-' in a
@@ -165,6 +182,24 @@ export function parseClaudeJSON(projectsDir) {
         cost: config.cost || 0,
         currency: 'USD',
       });
+    };
+
+    // Main session transcripts are flat .jsonl files directly in the project
+    // dir; the matching cost lives in .claude.json keyed by session id.
+    for (const file of fs.readdirSync(dirPath)) {
+      if (!file.endsWith('.jsonl')) continue;
+      const sessionId = file.slice(0, -6);
+      emit(path.join(dirPath, file), `claude_${sessionId}`, configBySession.get(sessionId) || {});
+    }
+
+    // Delegated agents (Task tool) write their own transcripts under a
+    // subagents/ directory nested beneath the session (and, for agents that
+    // themselves delegate, deeper still). Same format, different model — this
+    // is where Sonnet work lives when Opus/Fable delegates. Each becomes its
+    // own session so per-model tokens and cost attribute correctly; there is
+    // no recorded cost for them, so the normalizer estimates from tokens.
+    for (const subFile of findSubagentTranscripts(dirPath)) {
+      emit(subFile, `claude_sub_${path.basename(subFile, '.jsonl')}`);
     }
   }
 

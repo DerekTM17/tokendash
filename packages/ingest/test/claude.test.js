@@ -62,6 +62,46 @@ describe('claude parser integration', () => {
     }
   });
 
+  it('parses delegated subagent transcripts as their own sessions', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-sub-'));
+    const projDir = path.join(tmpDir, '-home-test-project');
+    // Real layout: main transcript is a flat file; subagents live under
+    // <session-id>/subagents/, and nested delegation goes deeper still.
+    const nested = path.join(projDir, 'sess-1', 'subagents', 'agent-x', 'subagents');
+    fs.mkdirSync(nested, { recursive: true });
+    fs.writeFileSync(path.join(projDir, 'sess-1.jsonl'), FIXTURE + '\n');
+
+    const agent = (model, id, tokens) => JSON.stringify({
+      message: {
+        model, id, role: 'assistant',
+        usage: { input_tokens: tokens, output_tokens: tokens, cache_read_input_tokens: tokens, cache_creation_input_tokens: 0 },
+      },
+      type: 'assistant',
+      timestamp: '2026-01-15T10:05:00.000Z',
+      cwd: '/home/test/project',
+    });
+    fs.writeFileSync(path.join(projDir, 'sess-1', 'subagents', 'agent-deadbeef.jsonl'), agent('claude-sonnet-5', 'm1', 10) + '\n');
+    fs.writeFileSync(path.join(nested, 'agent-cafe.jsonl'), agent('claude-haiku-4-5', 'm2', 5) + '\n');
+
+    try {
+      const sessions = parseClaudeJSON(tmpDir);
+      assert.strictEqual(sessions.length, 3, 'top-level + 2 (nested) subagents');
+
+      const sonnet = sessions.find(s => s.model === 'claude-sonnet-5');
+      assert.ok(sonnet, 'the delegated sonnet agent must surface as its own session');
+      assert.strictEqual(sonnet.tool, 'claude');
+      assert.strictEqual(sonnet.inputTokens, 10);
+      assert.strictEqual(sonnet.cacheReadTokens, 10);
+      assert.strictEqual(sonnet.cost, 0, 'subagents carry no recorded cost (normalizer estimates)');
+      assert.ok(sonnet.id.includes('deadbeef'), 'id derived from the agent file, kept distinct');
+
+      assert.ok(sessions.find(s => s.model === 'claude-haiku-4-5'), 'a deeply-nested subagent is still found');
+      assert.ok(sessions.find(s => s.model === 'claude-opus-4-7'), 'the parent opus session is unchanged');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it('returns empty array for non-existent directory', () => {
     const sessions = parseClaudeJSON('/nonexistent/path/xyz');
     assert.deepStrictEqual(sessions, []);

@@ -34,6 +34,11 @@ the parser is wrong, no matter what the test suite says. Fix the source, don't s
   it has no `model` field (real models are in `lastModelUsage` keys). Real per-session history lives
   in transcript JSONLs at `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`; each assistant line
   has `message.usage` (input/output/cache tokens) and `message.model`. Parse those.
+  **Delegated agents (Task tool) write SEPARATE transcripts** under
+  `<encoded-cwd>/<session-id>/subagents/…`, nested one level deeper per re-delegation (real depths 3
+  and 5). This is where Sonnet/Haiku work lives when Opus/Fable delegates — miss it and non-Opus
+  models are nearly invisible. Walk `subagents/` recursively, emit each as its own session (model =
+  its own; no recorded cost, so the normalizer estimates from tokens). Do NOT assume a fixed depth.
 - **opencode** — SQLite at `~/.local/share/opencode/opencode.db`, `session` table. Real usage is in
   columns `cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write`.
   Gotchas: `model` is stored as a JSON string (`{"id":"...","providerID":"..."}`) — extract `.id`;
