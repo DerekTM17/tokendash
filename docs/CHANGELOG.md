@@ -6,6 +6,12 @@ also include **Tradeoffs / Alternatives considered**.
 
 Curated, not exhaustive — `git log` has every commit.
 
+## 2026-07-21
+
+### Delegated subagent transcripts ingested (Sonnet/Haiku visibility)
+
+**Why:** All delegated-agent usage was invisible — the parser skipped the nested subagents/ transcripts where Sonnet/Haiku run under Task delegation, understating totals by ~$786 and hiding Sonnet entirely.
+
 ## 2026-07-20
 
 ### Content-inferred project attribution for $HOME-launched sessions
