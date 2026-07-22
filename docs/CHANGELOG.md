@@ -8,6 +8,10 @@ Curated, not exhaustive — `git log` has every commit.
 
 ## 2026-07-21
 
+### Per-model attribution within a session
+
+**Why:** Mid-session /model switches were collapsed to the dominant model, hiding the other model's tokens and pricing them wrong; each model in a transcript now gets its own accurately-priced row.
+
 ### Delegated subagent transcripts ingested (Sonnet/Haiku visibility)
 
 **Why:** All delegated-agent usage was invisible — the parser skipped the nested subagents/ transcripts where Sonnet/Haiku run under Task delegation, understating totals by ~$786 and hiding Sonnet entirely.
