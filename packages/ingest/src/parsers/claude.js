@@ -94,26 +94,19 @@ function parseTranscriptFile(filePath) {
     if (!existing || total > existing.total) usageById.set(id, { ...tok, total });
   }
 
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheReadTokens = 0;
-  let cacheWriteTokens = 0;
-  const modelTokens = new Map();
+  // Aggregate tokens PER MODEL rather than collapsing to a dominant one, so a
+  // session that switches models mid-way (a /model change) attributes each
+  // model's tokens correctly instead of hiding the minority under the majority.
+  // <synthetic> is Claude Code's own placeholder message, not real model usage.
+  const byModel = new Map();
   for (const t of usageById.values()) {
-    inputTokens += t.input;
-    outputTokens += t.output;
-    cacheReadTokens += t.cacheRead;
-    cacheWriteTokens += t.cacheWrite;
-    modelTokens.set(t.model, (modelTokens.get(t.model) || 0) + t.total);
-  }
-
-  let model = 'unknown';
-  let bestTotal = -1;
-  for (const [m, t] of modelTokens) {
-    if (t > bestTotal) {
-      bestTotal = t;
-      model = m;
-    }
+    if (t.model === '<synthetic>') continue;
+    const acc = byModel.get(t.model) || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    acc.input += t.input;
+    acc.output += t.output;
+    acc.cacheRead += t.cacheRead;
+    acc.cacheWrite += t.cacheWrite;
+    byModel.set(t.model, acc);
   }
 
   let cwd = null;
@@ -125,15 +118,7 @@ function parseTranscriptFile(filePath) {
     }
   }
 
-  return {
-    cwd,
-    model,
-    firstTimestamp,
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
-    cacheWriteTokens,
-  };
+  return { cwd, firstTimestamp, byModel };
 }
 
 export function parseClaudeJSON(projectsDir) {
@@ -151,37 +136,46 @@ export function parseClaudeJSON(projectsDir) {
   for (const projDir of projDirs) {
     const dirPath = path.join(base, projDir.name);
 
-    // Turn one transcript file into a session row. `config` supplies a
-    // recorded cost when we have one (top-level sessions matched by id);
-    // subagents have none, so cost stays 0 and the normalizer estimates it
-    // from tokens x model pricing.
-    const emit = (filePath, id, config = {}) => {
+    // Turn one transcript file into session rows — one per model used, so a
+    // mid-session /model switch attributes each model's tokens correctly.
+    // `config` supplies a recorded cost when we have one (top-level sessions
+    // matched by id); subagents have none, so cost stays 0 and the normalizer
+    // estimates it from tokens x model pricing.
+    const emit = (filePath, baseId, config = {}) => {
       let transcript;
       try {
         transcript = parseTranscriptFile(filePath);
       } catch {
         return;
       }
-      sessions.push({
-        id,
-        tool: 'claude',
-        // The transcript's own cwd is authoritative. Only fall back to the
-        // config path or the folder-name decode (lossy — it turns any '-' in a
-        // real dir name into '/') when the transcript carried no cwd.
-        cwd: transcript.cwd || config.cwd || decodeCwdFromDir(projDir.name),
-        project: '',
-        model: transcript.model,
-        startedAt: transcript.firstTimestamp
-          ? new Date(transcript.firstTimestamp).toISOString()
-          : null,
-        duration: config.duration || null,
-        inputTokens: transcript.inputTokens,
-        outputTokens: transcript.outputTokens,
-        cacheReadTokens: transcript.cacheReadTokens,
-        cacheWriteTokens: transcript.cacheWriteTokens,
-        cost: config.cost || 0,
-        currency: 'USD',
-      });
+      const models = [...transcript.byModel.entries()];
+      // The transcript's own cwd is authoritative. Only fall back to the config
+      // path or the folder-name decode (lossy — it turns any '-' in a real dir
+      // name into '/') when the transcript carried no cwd.
+      const cwd = transcript.cwd || config.cwd || decodeCwdFromDir(projDir.name);
+      const startedAt = transcript.firstTimestamp ? new Date(transcript.firstTimestamp).toISOString() : null;
+      for (const [model, tok] of models) {
+        sessions.push({
+          // Bare id when the session is single-model (the common case, keeps
+          // ids stable); suffixed per model only when a split actually occurs.
+          id: models.length > 1 ? `${baseId}__${model}` : baseId,
+          tool: 'claude',
+          cwd,
+          project: '',
+          model,
+          startedAt,
+          duration: config.duration || null,
+          inputTokens: tok.input,
+          outputTokens: tok.output,
+          cacheReadTokens: tok.cacheRead,
+          cacheWriteTokens: tok.cacheWrite,
+          // A recorded cost covers the whole transcript; only trust it for a
+          // single-model session. Split sessions fall back to per-model
+          // estimation (in practice no config-priced session is multi-model).
+          cost: (models.length === 1 && config.cost) || 0,
+          currency: 'USD',
+        });
+      }
     };
 
     // Main session transcripts are flat .jsonl files directly in the project

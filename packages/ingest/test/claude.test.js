@@ -102,6 +102,51 @@ describe('claude parser integration', () => {
     }
   });
 
+  it('splits a mid-session model switch into one session per model', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-multi-'));
+    const projDir = path.join(tmpDir, '-home-test-project');
+    fs.mkdirSync(projDir, { recursive: true });
+    const line = (model, id, tok) => JSON.stringify({
+      message: { model, id, role: 'assistant',
+        usage: { input_tokens: tok, output_tokens: tok, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
+      type: 'assistant', timestamp: '2026-01-15T10:00:00.000Z', cwd: '/home/test/project',
+    });
+    // A session that started on Fable then switched to Opus, plus a
+    // zero-token <synthetic> line that must not become its own session.
+    fs.writeFileSync(path.join(projDir, 'switch.jsonl'),
+      [line('claude-fable-5', 'a', 300), line('claude-opus-4-8', 'b', 100),
+       line('<synthetic>', 'c', 0)].join('\n') + '\n');
+
+    try {
+      const sessions = parseClaudeJSON(tmpDir);
+      assert.strictEqual(sessions.length, 2, 'one row per real model, synthetic dropped');
+
+      const fable = sessions.find(s => s.model === 'claude-fable-5');
+      const opus = sessions.find(s => s.model === 'claude-opus-4-8');
+      assert.ok(fable && opus, 'both models surface as distinct sessions');
+      assert.strictEqual(fable.inputTokens, 300, 'fable keeps only its own tokens');
+      assert.strictEqual(opus.inputTokens, 100, 'opus keeps only its own tokens');
+      assert.notStrictEqual(fable.id, opus.id, 'ids stay unique across the split');
+      assert.ok(sessions.every(s => s.model !== '<synthetic>'), 'synthetic is never a session');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a single-model session id stable (no suffix)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-single-'));
+    const projDir = path.join(tmpDir, '-test-fixture');
+    fs.mkdirSync(projDir);
+    fs.writeFileSync(path.join(projDir, 'only-one.jsonl'), FIXTURE + '\n');
+    try {
+      const sessions = parseClaudeJSON(tmpDir);
+      assert.strictEqual(sessions.length, 1);
+      assert.strictEqual(sessions[0].id, 'claude_only-one', 'single-model id is unsuffixed');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it('returns empty array for non-existent directory', () => {
     const sessions = parseClaudeJSON('/nonexistent/path/xyz');
     assert.deepStrictEqual(sessions, []);
