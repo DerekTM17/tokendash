@@ -6,6 +6,12 @@ also include **Tradeoffs / Alternatives considered**.
 
 Curated, not exhaustive — `git log` has every commit.
 
+## 2026-07-25
+
+### Opus 5 pricing + unpriced-model warning
+
+**Why:** Claude Opus 5 was missing from the pricing table so 31 sessions and 354M tokens priced at $0 (the prefix matcher can't reach it from claude-opus-4); ingest now warns on any model that has tokens but no pricing entry, so the next new model family surfaces on first ingest instead of silently understating cost.
+
 ## 2026-07-21
 
 ### Per-model attribution within a session
