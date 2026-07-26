@@ -101,3 +101,31 @@ describe('content-based project inference', () => {
     assert.strictEqual(normalized[0].projectInferred, false);
   });
 });
+
+describe('unpriced-model detection', () => {
+  it('reports a model that has tokens but no pricing entry', () => {
+    const { unpricedModels } = normalize([session({
+      model: 'gpt-9-nova', cost: 0,
+      inputTokens: 1000, outputTokens: 500, cacheReadTokens: 200, cacheWriteTokens: 300,
+    })], projects);
+    assert.deepStrictEqual(unpricedModels, { 'gpt-9-nova': { sessions: 1, tokens: 2000 } });
+  });
+
+  it('aggregates sessions and tokens per model', () => {
+    const { unpricedModels } = normalize([
+      session({ id: 'a', model: 'gpt-9-nova', cost: 0, inputTokens: 10, outputTokens: 0 }),
+      session({ id: 'b', model: 'gpt-9-nova', cost: 0, inputTokens: 5, outputTokens: 0 }),
+    ], projects);
+    assert.deepStrictEqual(unpricedModels, { 'gpt-9-nova': { sessions: 2, tokens: 15 } });
+  });
+
+  it('stays empty for priced models, zero-token sessions, and unknown', () => {
+    const { unpricedModels } = normalize([
+      session({ id: 'a', model: 'claude-opus-5', cost: 0 }),
+      session({ id: 'b', model: 'gpt-9-nova', cost: 0,
+        inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }),
+      session({ id: 'c', model: 'unknown', cost: 0 }),
+    ], projects);
+    assert.deepStrictEqual(unpricedModels, {});
+  });
+});

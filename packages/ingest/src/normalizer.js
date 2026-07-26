@@ -99,6 +99,20 @@ export function normalize(sessions, projects) {
       };
     });
 
+  // A model missing from the pricing table costs $0 forever and no test catches
+  // it — the sessions look fine, they just don't add up. Surface each one with
+  // the tokens it silently dropped so a new model family gets noticed on the
+  // first ingest after it appears, not months later.
+  const unpricedModels = {};
+  for (const s of normalized) {
+    if (s.cost || s.model === 'unknown') continue;
+    const tokens = s.inputTokens + s.outputTokens + s.cacheReadTokens + s.cacheWriteTokens;
+    if (!tokens) continue;
+    const entry = (unpricedModels[s.model] ||= { sessions: 0, tokens: 0 });
+    entry.sessions += 1;
+    entry.tokens += tokens;
+  }
+
   const totals = normalized.reduce(
     (acc, s) => ({
       cost: acc.cost + s.cost,
@@ -108,5 +122,5 @@ export function normalize(sessions, projects) {
     { cost: 0, tokens: 0, sessions: 0 }
   );
 
-  return { normalized, totals };
+  return { normalized, totals, unpricedModels };
 }

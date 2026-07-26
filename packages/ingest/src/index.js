@@ -41,7 +41,14 @@ function ingest() {
     }
   }
 
-  const { normalized, totals } = normalize(sessions, projects);
+  const { normalized, totals, unpricedModels } = normalize(sessions, projects);
+
+  for (const [model, { sessions: n, tokens }] of Object.entries(unpricedModels)) {
+    console.error(
+      `WARNING: no pricing entry for "${model}" — ${n} session(s), ` +
+        `${tokens.toLocaleString()} tokens counted as $0. Add it to pricing.js.`
+    );
+  }
 
   const output = {
     generated: new Date().toISOString(),

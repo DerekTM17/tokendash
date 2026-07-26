@@ -16,6 +16,12 @@ describe('priceForModel', () => {
     assert.deepStrictEqual(priceForModel('claude-opus-4-8'), { input: 5, output: 25 });
   });
 
+  it('resolves claude-opus-5', () => {
+    // Opus 5 shares the Opus 4.8 tier at $5/$25 per MTok. It does NOT match the
+    // "claude-opus-4" prefix, so a missing entry silently prices it at $0.
+    assert.deepStrictEqual(priceForModel('claude-opus-5'), { input: 5, output: 25 });
+  });
+
   it('returns null for unknown models', () => {
     assert.strictEqual(priceForModel('unknown'), null);
     assert.strictEqual(priceForModel('deepseek-v4-pro'), null);
