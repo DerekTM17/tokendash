@@ -7,6 +7,7 @@ domain. Markdown checkboxes; edit by hand. Shipped items go to
 ## Now
 
 Items we're actively working on or planning to do imminently.
+- [ ] **[bug]** Codex parser disagrees with ccusage on model attribution — reconcile (2026-07-27) shows every Claude model matching to the cent, but Codex does not: we report gpt-5.6-terra at 642M tokens/$208 where ccusage sees 5.5M/$3.09, and gpt-5.6-sol at $43 where ccusage sees $144. Totals: ours $252 vs ccusage $148 across Codex. Token counts disagree, so this is model ATTRIBUTION in packages/ingest/src/parsers/codex.js, not pricing — likely reading the wrong model field from the rollout, or the session-level model rather than per-turn. ~3.5% of the headline number. Repro: node scripts/reconcile.mjs <!-- added 2026-07-27 -->
 
 ## Soon
 
