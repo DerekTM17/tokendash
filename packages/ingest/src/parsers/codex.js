@@ -124,7 +124,6 @@ export function parseCodexData(codexDir) {
       startedAt: transcript.firstTimestamp
         ? new Date(transcript.firstTimestamp).toISOString()
         : null,
-      duration: null,
       inputTokens: transcript.inputTokens,
       outputTokens: transcript.outputTokens,
       cacheReadTokens: transcript.cacheReadTokens,

@@ -100,7 +100,6 @@ export function parseOpencodeSessions(dbPath) {
         startedAt: row.time_created
           ? new Date(row.time_created).toISOString()
           : null,
-        duration: null,
         inputTokens: row.tokens_input || 0,
         outputTokens: (row.tokens_output || 0) + (row.tokens_reasoning || 0),
         cacheReadTokens: row.tokens_cache_read || 0,

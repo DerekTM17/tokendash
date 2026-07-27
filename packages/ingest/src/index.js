@@ -64,23 +64,47 @@ function ingest() {
   return output;
 }
 
+// Re-ingest is debounced: transcripts are appended on every assistant message,
+// so raw events arrive in long bursts, and a full ingest walks thousands of
+// files (~2.6s). Coalesce a burst into one run at the end of it.
+const DEBOUNCE_MS = 4000;
+
 if (watch) {
   (async () => {
     const chokidar = (await import('chokidar')).default;
     const sources = [];
 
-    const claudeConfig = path.join(os.homedir(), '.claude.json');
-    if (fs.existsSync(claudeConfig)) sources.push(claudeConfig);
-    const claudeHistory = path.join(os.homedir(), '.claude', 'history.jsonl');
-    if (fs.existsSync(claudeHistory)) sources.push(claudeHistory);
+    // Watch what the parsers actually READ. Earlier this watched ~/.claude.json
+    // and ~/.claude/history.jsonl — neither is a data source (the transcripts
+    // under projects/ are), so refreshes only happened incidentally, when those
+    // proxy files happened to churn, and Codex was never watched at all.
+    const claudeProjects = path.join(os.homedir(), '.claude', 'projects');
+    if (fs.existsSync(claudeProjects)) sources.push(claudeProjects);
+    const codexSessions = path.join(os.homedir(), '.codex', 'sessions');
+    if (fs.existsSync(codexSessions)) sources.push(codexSessions);
     const opencodeDb = path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
     if (fs.existsSync(opencodeDb)) sources.push(opencodeDb);
 
-    const watcher = chokidar.watch(sources, { persistent: true });
-    watcher.on('change', () => {
-      console.log('Source changed, re-ingesting...');
-      ingest();
-    });
+    let timer = null;
+    const schedule = filePath => {
+      // Directory trees emit for every file; only our data files matter.
+      if (filePath && !/\.(jsonl|db)$/.test(filePath)) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        console.log('Source changed, re-ingesting...');
+        try {
+          ingest();
+        } catch (e) {
+          // A transient read error (file rotated mid-walk) must not kill the
+          // long-lived watcher — the next event re-runs it.
+          console.error('Ingest failed:', e.message);
+        }
+      }, DEBOUNCE_MS);
+    };
+
+    const watcher = chokidar.watch(sources, { persistent: true, ignoreInitial: true });
+    watcher.on('add', schedule);
+    watcher.on('change', schedule);
     console.log(`Watching ${sources.length} source(s)...`);
     ingest();
   })();

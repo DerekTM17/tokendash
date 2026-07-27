@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
 
 // Near-real-time: re-fetch tokens.json on an interval so the dashboard reflects
-// the ingest watcher's latest write without a manual refresh. Cache-busting
-// query param defeats any intermediary caching of the static file.
+// the ingest watcher's latest write without a manual refresh.
+//
+// Deliberately NOT cache-busted. The file is served with `Cache-Control:
+// no-cache`, which already forces the browser to revalidate on every poll — so
+// an unchanged file costs a 304 with an empty body instead of a re-download. A
+// `?t=${Date.now()}` param would mint a unique URL each time, leaving nothing
+// in the HTTP cache to validate against, so every poll would re-transfer and
+// re-parse the whole payload (1.5MB and growing).
 const POLL_MS = 8000;
 
 export function useTokenData() {
@@ -12,7 +18,7 @@ export function useTokenData() {
   useEffect(() => {
     let alive = true;
     const load = () =>
-      fetch(`${import.meta.env.BASE_URL}tokens.json?t=${Date.now()}`)
+      fetch(`${import.meta.env.BASE_URL}tokens.json`)
         .then(r => {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           return r.json();

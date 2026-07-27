@@ -7,24 +7,6 @@ function decodeCwdFromDir(dirName) {
   return '/' + dirName.replace(/-/g, '/');
 }
 
-function readClaudeConfig(filePath) {
-  const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  const projects = raw.projects || {};
-  const bySessionId = new Map();
-
-  for (const [cwd, value] of Object.entries(projects)) {
-    if (typeof value !== 'object' || value === null) continue;
-    if (!value.lastSessionId) continue;
-
-    bySessionId.set(value.lastSessionId, {
-      cwd,
-      cost: value.lastCost || 0,
-      duration: value.lastDuration || null,
-    });
-  }
-  return bySessionId;
-}
-
 // Collect every .jsonl transcript that lives inside a `subagents` directory
 // anywhere beneath `root`. Delegated agents nest one level down per session,
 // and agents that delegate again nest deeper, so this walks recursively.
@@ -86,6 +68,10 @@ function parseTranscriptFile(filePath) {
       output: usage.output_tokens || 0,
       cacheRead: usage.cache_read_input_tokens || 0,
       cacheWrite: usage.cache_creation_input_tokens || 0,
+      // Anthropic splits cache writes by TTL and bills the 1-hour tier at 2x
+      // input vs 1.25x for 5-minute. Claude Code uses 1h heavily, so tracking
+      // the subset separately is worth real money.
+      cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens || 0,
     };
     // Entries without an id can't be deduped — key them uniquely by line.
     const id = entry.message.id || `line-${usageById.size}`;
@@ -101,11 +87,13 @@ function parseTranscriptFile(filePath) {
   const byModel = new Map();
   for (const t of usageById.values()) {
     if (t.model === '<synthetic>') continue;
-    const acc = byModel.get(t.model) || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    const acc = byModel.get(t.model)
+      || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 0 };
     acc.input += t.input;
     acc.output += t.output;
     acc.cacheRead += t.cacheRead;
     acc.cacheWrite += t.cacheWrite;
+    acc.cacheWrite1h += t.cacheWrite1h;
     byModel.set(t.model, acc);
   }
 
@@ -123,11 +111,6 @@ function parseTranscriptFile(filePath) {
 
 export function parseClaudeJSON(projectsDir) {
   const base = projectsDir || path.join(os.homedir(), '.claude', 'projects');
-  const configPath = path.join(os.homedir(), '.claude.json');
-  const configBySession = fs.existsSync(configPath)
-    ? readClaudeConfig(configPath)
-    : new Map();
-
   const sessions = [];
 
   if (!fs.existsSync(base)) return sessions;
@@ -138,10 +121,11 @@ export function parseClaudeJSON(projectsDir) {
 
     // Turn one transcript file into session rows — one per model used, so a
     // mid-session /model switch attributes each model's tokens correctly.
-    // `config` supplies a recorded cost when we have one (top-level sessions
-    // matched by id); subagents have none, so cost stays 0 and the normalizer
-    // estimates it from tokens x model pricing.
-    const emit = (filePath, baseId, config = {}) => {
+    // Cost is always left at 0 here: the normalizer derives it from
+    // tokens x model pricing. (We used to read a recorded cost from
+    // ~/.claude.json's `lastCost`, but that file keeps only the most recent
+    // session per project and it matched 0 of 2,385 sessions in practice.)
+    const emit = (filePath, baseId) => {
       let transcript;
       try {
         transcript = parseTranscriptFile(filePath);
@@ -149,10 +133,10 @@ export function parseClaudeJSON(projectsDir) {
         return;
       }
       const models = [...transcript.byModel.entries()];
-      // The transcript's own cwd is authoritative. Only fall back to the config
-      // path or the folder-name decode (lossy — it turns any '-' in a real dir
-      // name into '/') when the transcript carried no cwd.
-      const cwd = transcript.cwd || config.cwd || decodeCwdFromDir(projDir.name);
+      // The transcript's own cwd is authoritative. Only fall back to the
+      // folder-name decode (lossy — it turns any '-' in a real dir name into
+      // '/') when the transcript carried no cwd.
+      const cwd = transcript.cwd || decodeCwdFromDir(projDir.name);
       const startedAt = transcript.firstTimestamp ? new Date(transcript.firstTimestamp).toISOString() : null;
       for (const [model, tok] of models) {
         sessions.push({
@@ -164,26 +148,22 @@ export function parseClaudeJSON(projectsDir) {
           project: '',
           model,
           startedAt,
-          duration: config.duration || null,
           inputTokens: tok.input,
           outputTokens: tok.output,
           cacheReadTokens: tok.cacheRead,
           cacheWriteTokens: tok.cacheWrite,
-          // A recorded cost covers the whole transcript; only trust it for a
-          // single-model session. Split sessions fall back to per-model
-          // estimation (in practice no config-priced session is multi-model).
-          cost: (models.length === 1 && config.cost) || 0,
+          cacheWrite1hTokens: tok.cacheWrite1h,
+          cost: 0,
           currency: 'USD',
         });
       }
     };
 
-    // Main session transcripts are flat .jsonl files directly in the project
-    // dir; the matching cost lives in .claude.json keyed by session id.
+    // Main session transcripts are flat .jsonl files directly in the project dir.
     for (const file of fs.readdirSync(dirPath)) {
       if (!file.endsWith('.jsonl')) continue;
       const sessionId = file.slice(0, -6);
-      emit(path.join(dirPath, file), `claude_${sessionId}`, configBySession.get(sessionId) || {});
+      emit(path.join(dirPath, file), `claude_${sessionId}`);
     }
 
     // Delegated agents (Task tool) write their own transcripts under a
@@ -199,8 +179,4 @@ export function parseClaudeJSON(projectsDir) {
 
   sessions.sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
   return sessions;
-}
-
-export function defaultPath() {
-  return path.join(os.homedir(), '.claude.json');
 }
