@@ -6,6 +6,12 @@ also include **Tradeoffs / Alternatives considered**.
 
 Curated, not exhaustive — `git log` has every commit.
 
+## 2026-07-27
+
+### Pricing reconciliation + payload cost
+
+**Why:** Every Claude dollar here is estimated, so a wrong rate moved the headline number invisibly — Opus 5 read $0 and Sonnet 5 sat 50% high; pricing now comes from a vendored LiteLLM snapshot, cache writes are billed by TTL tier (55% are 1-hour at 2x, previously all charged at 1.25x), and scripts/reconcile.mjs cross-checks against ccusage, which now agrees to the cent on every Claude model. Polling also stopped re-downloading 1.5MB every 8 seconds.
+
 ## 2026-07-25
 
 ### Opus 5 pricing + unpriced-model warning
