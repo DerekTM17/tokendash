@@ -6,6 +6,12 @@ also include **Tradeoffs / Alternatives considered**.
 
 Curated, not exhaustive — `git log` has every commit.
 
+## 2026-07-28
+
+### Codex attribution: per-turn model, replayed history dropped
+
+**Why:** Codex was the entire residual drift against ccusage, reading ~70% high and putting 642M tokens on gpt-5.6-terra that belonged to gpt-5.6-sol: the parser latched the first turn_context model and billed the whole cumulative counter to it, and threads that inherit a conversation (subagent spawns, resumes) replay the parent's entire transcript at file-open — 787 of 800 token_count events in one real rollout — so the parent's history was charged once per child. Usage is now the delta of the cumulative counter attributed to the model active at the time, with the file-open replay burst tracked but not billed; every Codex model now matches ccusage and total drift went +1.4% to -0.0%.
+
 ## 2026-07-27
 
 ### Cost feedback loop: status line + Read hook
