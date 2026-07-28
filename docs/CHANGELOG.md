@@ -8,6 +8,10 @@ Curated, not exhaustive — `git log` has every commit.
 
 ## 2026-07-28
 
+### Model attribution reconciles across every tool
+
+**Why:** Two parsers were mis-filing tokens by model and the guard meant to catch it had a hole. opencode left two April sessions at model 'unknown' because their session row never had the model column populated — 31.8M deepseek-v4-pro tokens priced $2.02 against ccusage's $8.24 — so the parser now falls back to the modelID on each assistant message. That bug survived months because the unpriced-model warning exempts both 'unknown' and any session carrying a cost, and opencode records its own cost, so it hit both exemptions at once; an unidentified model is a parser failure rather than a missing rate and now gets its own warning across every parser. With Codex fixed the same day, reconcile agrees with ccusage on all 11 models with no 'unknown' row at all.
+
 ### Codex attribution: per-turn model, replayed history dropped
 
 **Why:** Codex was the entire residual drift against ccusage, reading ~70% high and putting 642M tokens on gpt-5.6-terra that belonged to gpt-5.6-sol: the parser latched the first turn_context model and billed the whole cumulative counter to it, and threads that inherit a conversation (subagent spawns, resumes) replay the parent's entire transcript at file-open — 787 of 800 token_count events in one real rollout — so the parent's history was charged once per child. Usage is now the delta of the cumulative counter attributed to the model active at the time, with the file-open replay burst tracked but not billed; every Codex model now matches ccusage and total drift went +1.4% to -0.0%.
