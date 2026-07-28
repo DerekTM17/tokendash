@@ -7,7 +7,7 @@ domain. Markdown checkboxes; edit by hand. Shipped items go to
 ## Now
 
 Items we're actively working on or planning to do imminently.
-- [ ] **[bug]** opencode parser leaves 2 April sessions at model `unknown` — reconcile (2026-07-28) shows deepseek-v4-pro at ours $6.22 vs ccusage $8.24, with a matching 31.8M tokens/$2.02 sitting under `unknown`. One-to-one swap, so it is model ATTRIBUTION in packages/ingest/src/parsers/opencode.js, not pricing. Only 2 of 27 opencode deepseek sessions are affected (ses_22feaf0e… and ses_230edc28…, both 2026-04-27), so it is likely an early-schema difference in how those rows record the model. Pre-existing — it was masked by the larger Codex drift until that was fixed. Repro: node scripts/reconcile.mjs <!-- added 2026-07-28 -->
+_Nothing active — `node scripts/reconcile.mjs` agrees with ccusage on all 11 models as of 2026-07-28._
 
 ## Soon
 
