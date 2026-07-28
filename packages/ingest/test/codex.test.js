@@ -91,6 +91,112 @@ describe('codex parser integration', () => {
     assert.deepStrictEqual(sessions, []);
   });
 
+  // Regression: a rollout can switch models mid-session. The parser used to
+  // latch the FIRST turn_context model and bill the whole cumulative counter
+  // to it, which put 642M tokens on gpt-5.6-terra when the work was gpt-5.6-sol's.
+  it('attributes tokens per model when a rollout switches models mid-session', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-split-'));
+    const sessionsDir = path.join(tmpDir, 'sessions', '2026', '07', '21');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const tc = (t, model) => JSON.stringify({
+      timestamp: t, type: 'turn_context', payload: { cwd: '/home/test/p', model }
+    });
+    // total_token_usage is CUMULATIVE across the whole rollout, so each event's
+    // own usage is its delta from the previous event.
+    const usage = (t, input, cached, output) => JSON.stringify({
+      timestamp: t, type: 'event_msg',
+      payload: { type: 'token_count', info: { total_token_usage: {
+        input_tokens: input, cached_input_tokens: cached,
+        output_tokens: output, reasoning_output_tokens: 0,
+        total_tokens: input + output } } }
+    });
+
+    const lines = [
+      JSON.stringify({ timestamp: '2026-07-21T16:05:41.495Z', type: 'session_meta',
+        payload: { id: 'split-session', cwd: '/home/test/p' } }),
+      tc('2026-07-21T16:05:42.000Z', 'gpt-5.6-terra'),
+      usage('2026-07-21T16:05:50.000Z', 1000, 400, 50),
+      // /model switch — everything after this belongs to sol
+      tc('2026-07-21T16:06:00.000Z', 'gpt-5.6-sol'),
+      usage('2026-07-21T16:06:10.000Z', 9000, 7400, 250),
+    ].join('\n') + '\n';
+    fs.writeFileSync(path.join(sessionsDir, 'rollout-2026-07-21T12-05-35-split-session.jsonl'), lines);
+
+    try {
+      const sessions = parseCodexData(tmpDir);
+      assert.strictEqual(sessions.length, 2, 'one session row per model');
+
+      const terra = sessions.find(s => s.model === 'gpt-5.6-terra');
+      const sol = sessions.find(s => s.model === 'gpt-5.6-sol');
+      assert.ok(terra && sol, 'both models present');
+
+      // terra: first event only — 1000 input of which 400 cached, 50 output.
+      assert.strictEqual(terra.inputTokens, 600);
+      assert.strictEqual(terra.cacheReadTokens, 400);
+      assert.strictEqual(terra.outputTokens, 50);
+
+      // sol: the DELTA of the cumulative counter, not its absolute value.
+      assert.strictEqual(sol.inputTokens, 1000, '(9000-1000) minus (7400-400) cached');
+      assert.strictEqual(sol.cacheReadTokens, 7000);
+      assert.strictEqual(sol.outputTokens, 200);
+
+      // Ids are suffixed only when a split actually occurs (matches claude.js).
+      assert.ok(terra.id.endsWith('__gpt-5.6-terra'), `got ${terra.id}`);
+      assert.ok(sol.id.endsWith('__gpt-5.6-sol'), `got ${sol.id}`);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  // Regression: Codex subagent/resumed threads replay the PARENT's entire
+  // transcript into the new rollout at file-open time (787 of 800 token_count
+  // events in one real case), re-stamped with the open timestamp. Billing those
+  // counted the parent's history once per child.
+  it('skips inherited history replayed at file open', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-replay-'));
+    const sessionsDir = path.join(tmpDir, 'sessions', '2026', '07', '22');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const usage = (t, input, cached, output) => JSON.stringify({
+      timestamp: t, type: 'event_msg',
+      payload: { type: 'token_count', info: { total_token_usage: {
+        input_tokens: input, cached_input_tokens: cached,
+        output_tokens: output, reasoning_output_tokens: 0,
+        total_tokens: input + output } } }
+    });
+
+    const lines = [
+      JSON.stringify({ timestamp: '2026-07-22T15:12:11.672Z', type: 'session_meta',
+        payload: { id: 'child-session', cwd: '/home/test/p',
+          parent_thread_id: 'parent-session',
+          source: { subagent: { thread_spawn: { parent_thread_id: 'parent-session', depth: 1 } } } } }),
+      JSON.stringify({ timestamp: '2026-07-22T15:12:11.672Z', type: 'turn_context',
+        payload: { cwd: '/home/test/p', model: 'gpt-5.6-sol' } }),
+      // --- replayed parent history: dumped in a burst at file open ---
+      usage('2026-07-22T15:12:11.673Z', 500000, 480000, 3000),
+      usage('2026-07-22T15:12:11.700Z', 900000, 870000, 5000),
+      usage('2026-07-22T15:12:11.730Z', 1000000, 960000, 6000),
+      // --- this thread's own work, seconds later ---
+      usage('2026-07-22T15:12:18.010Z', 1040000, 995000, 6100),
+    ].join('\n') + '\n';
+    fs.writeFileSync(path.join(sessionsDir, 'rollout-2026-07-22T11-12-11-child-session.jsonl'), lines);
+
+    try {
+      const sessions = parseCodexData(tmpDir);
+      assert.strictEqual(sessions.length, 1);
+      const s = sessions[0];
+
+      // Only the final event is this thread's own: deltas off the last
+      // replayed counter (1040000-1000000 input, 995000-960000 cached).
+      assert.strictEqual(s.cacheReadTokens, 35000, 'inherited cache reads not re-billed');
+      assert.strictEqual(s.inputTokens, 5000, '(1040000-1000000) minus 35000 cached');
+      assert.strictEqual(s.outputTokens, 100);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it('returns empty array when reading history.jsonl instead of rollout', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-bad-'));
     try {
