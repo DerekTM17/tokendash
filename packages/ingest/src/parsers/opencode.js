@@ -8,14 +8,61 @@ function extractProject(dir) {
   return parts[parts.length - 1] || 'other';
 }
 
-function parseModel(raw) {
-  if (!raw) return 'unknown';
+function parseModel(raw, fallback) {
+  if (!raw) return fallback || 'unknown';
   try {
     const parsed = JSON.parse(raw);
-    return parsed.id || 'unknown';
+    return parsed.id || fallback || 'unknown';
   } catch {
-    return 'unknown';
+    return fallback || 'unknown';
   }
+}
+
+// Early opencode session rows never had the `model` column populated, so two
+// real April sessions read as 'unknown' and their 31.8M tokens priced $2.02
+// against ccusage's $8.24 — the model was deepseek-v4-pro all along, recorded
+// on each assistant message. Recover it from there when the session row is
+// silent. Every one of the 27 local sessions carrying message-level models
+// used exactly one, so the dominant model is unambiguous; if that ever stops
+// holding, this is the place a per-model split would go (as in claude.js and
+// codex.js), which needs per-message tokens rather than the session totals.
+function modelsByMessage(db) {
+  const modelBySession = new Map();
+  let rows;
+  try {
+    rows = db.prepare('SELECT session_id, data FROM message WHERE data IS NOT NULL').all();
+  } catch {
+    return modelBySession; // older DBs may not have the table
+  }
+  const counts = new Map();
+  for (const row of rows) {
+    let data;
+    try {
+      data = JSON.parse(row.data);
+    } catch {
+      continue;
+    }
+    const model = data.modelID;
+    if (!model) continue;
+    let byModel = counts.get(row.session_id);
+    if (!byModel) {
+      byModel = new Map();
+      counts.set(row.session_id, byModel);
+    }
+    byModel.set(model, (byModel.get(model) || 0) + 1);
+  }
+  for (const [sid, byModel] of counts) {
+    let best = null;
+    let bestHits = -1;
+    for (const [m, hits] of byModel) {
+      if (hits > bestHits) {
+        bestHits = hits;
+        best = m;
+      }
+    }
+    if (best) modelBySession.set(sid, best);
+  }
+  return modelBySession;
 }
 
 // opencode records the same launch directory ($HOME) for every session, so the
@@ -83,6 +130,7 @@ export function parseOpencodeSessions(dbPath) {
     `).all();
 
     const dirBySession = inferSessionDirs(db);
+    const modelBySession = modelsByMessage(db);
 
     for (const row of rows) {
       // Prefer the project path inferred from the files the session touched;
@@ -96,7 +144,8 @@ export function parseOpencodeSessions(dbPath) {
         tool: 'opencode',
         cwd: dir,
         project,
-        model: parseModel(row.model),
+        // The session row wins when it has a model; messages are the fallback.
+        model: parseModel(row.model, modelBySession.get(row.id)),
         startedAt: row.time_created
           ? new Date(row.time_created).toISOString()
           : null,

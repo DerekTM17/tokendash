@@ -41,12 +41,20 @@ function ingest() {
     }
   }
 
-  const { normalized, totals, unpricedModels } = normalize(sessions, projects);
+  const { normalized, totals, unpricedModels, unknownModelSessions } = normalize(sessions, projects);
 
   for (const [model, { sessions: n, tokens }] of Object.entries(unpricedModels)) {
     console.error(
       `WARNING: no pricing entry for "${model}" — ${n} session(s), ` +
         `${tokens.toLocaleString()} tokens counted as $0. Add it to pricing.js.`
+    );
+  }
+
+  if (unknownModelSessions.sessions) {
+    console.error(
+      `WARNING: ${unknownModelSessions.sessions} session(s) with an unidentified model — ` +
+        `${unknownModelSessions.tokens.toLocaleString()} tokens attributed to "unknown". ` +
+        `This is a parser gap, not a missing rate: check the model field for that tool.`
     );
   }
 

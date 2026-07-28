@@ -104,10 +104,22 @@ export function normalize(sessions, projects) {
   // the tokens it silently dropped so a new model family gets noticed on the
   // first ingest after it appears, not months later.
   const unpricedModels = {};
+  // A model we never identified is a different failure from a model we can't
+  // price: there is no rate to add, the PARSER dropped the attribution. The
+  // unpriced check above exempts both 'unknown' and anything carrying a cost,
+  // and two real opencode sessions sat in that gap for months — 31.8M tokens
+  // filed under 'unknown' while the tool's own recorded cost kept them quiet.
+  // Counted separately so neither exemption can hide a parser regression.
+  const unknownModelSessions = { sessions: 0, tokens: 0 };
   for (const s of normalized) {
-    if (s.cost || s.model === 'unknown') continue;
     const tokens = s.inputTokens + s.outputTokens + s.cacheReadTokens + s.cacheWriteTokens;
     if (!tokens) continue;
+    if (s.model === 'unknown') {
+      unknownModelSessions.sessions += 1;
+      unknownModelSessions.tokens += tokens;
+      continue;
+    }
+    if (s.cost) continue;
     const entry = (unpricedModels[s.model] ||= { sessions: 0, tokens: 0 });
     entry.sessions += 1;
     entry.tokens += tokens;
@@ -122,5 +134,5 @@ export function normalize(sessions, projects) {
     { cost: 0, tokens: 0, sessions: 0 }
   );
 
-  return { normalized, totals, unpricedModels };
+  return { normalized, totals, unpricedModels, unknownModelSessions };
 }

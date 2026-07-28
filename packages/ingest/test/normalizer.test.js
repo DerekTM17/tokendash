@@ -129,3 +129,35 @@ describe('unpriced-model detection', () => {
     assert.deepStrictEqual(unpricedModels, {});
   });
 });
+
+// The unpriced-model guard deliberately skips 'unknown' (it has no pricing to
+// add) and skips anything carrying a cost. Two real opencode sessions hit both
+// exemptions at once — model 'unknown', cost recorded by the tool — so 31.8M
+// misattributed tokens stayed invisible for months. An unidentified model is a
+// PARSER failure rather than a missing rate, so it gets its own signal.
+describe('unidentified-model detection', () => {
+  it('reports sessions whose model never resolved, even when they carry a cost', () => {
+    const { unknownModelSessions } = normalize([
+      session({ id: 'a', model: 'unknown', cost: 2.02,
+        inputTokens: 600, outputTokens: 300, cacheReadTokens: 30000, cacheWriteTokens: 0 }),
+    ], projects);
+    assert.deepStrictEqual(unknownModelSessions, { sessions: 1, tokens: 30900 });
+  });
+
+  it('aggregates across tools and ignores zero-token sessions', () => {
+    const { unknownModelSessions } = normalize([
+      session({ id: 'a', tool: 'opencode', model: 'unknown', cost: 0, inputTokens: 100, outputTokens: 0 }),
+      session({ id: 'b', tool: 'codex', model: 'unknown', cost: 0, inputTokens: 50, outputTokens: 0 }),
+      session({ id: 'c', tool: 'codex', model: 'unknown', cost: 0,
+        inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }),
+    ], projects);
+    assert.deepStrictEqual(unknownModelSessions, { sessions: 2, tokens: 150 });
+  });
+
+  it('stays empty when every model resolved', () => {
+    const { unknownModelSessions } = normalize([
+      session({ id: 'a', model: 'claude-opus-5', inputTokens: 100 }),
+    ], projects);
+    assert.deepStrictEqual(unknownModelSessions, { sessions: 0, tokens: 0 });
+  });
+});

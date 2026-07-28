@@ -57,6 +57,14 @@ function createFixtureDb(tmpDir) {
       time_updated INTEGER,
       data TEXT
     );
+
+    CREATE TABLE message (
+      id TEXT PRIMARY KEY,
+      session_id TEXT,
+      time_created INTEGER,
+      time_updated INTEGER,
+      data TEXT
+    );
   `);
 
   db.prepare(`INSERT INTO project (id, name, worktree) VALUES (?, ?, ?)`)
@@ -87,6 +95,23 @@ function createFixtureDb(tmpDir) {
   db.prepare(`INSERT INTO part (id, message_id, session_id, data) VALUES (?, ?, ?, ?)`)
     .run('prt_2', 'msg_1', 'ses_001', toolCall);
 
+  // Third session: the session row carries NO model (early opencode rows never
+  // had the column backfilled), but its assistant messages record modelID.
+  db.prepare(`INSERT INTO session (id, project_id, directory, title, model, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write, time_created)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run('ses_003', 'global', '/home/user', 'Early session', null, 0.9, 600, 300, 0, 30000, 0, 1700000002000);
+
+  const asstMsg = JSON.stringify({
+    role: 'assistant', modelID: 'deepseek-v4-pro', providerID: 'opencode-go',
+  });
+  const userMsg = JSON.stringify({ role: 'user' });
+  db.prepare(`INSERT INTO message (id, session_id, data) VALUES (?, ?, ?)`)
+    .run('msg_a', 'ses_003', userMsg);
+  db.prepare(`INSERT INTO message (id, session_id, data) VALUES (?, ?, ?)`)
+    .run('msg_b', 'ses_003', asstMsg);
+  db.prepare(`INSERT INTO message (id, session_id, data) VALUES (?, ?, ?)`)
+    .run('msg_c', 'ses_003', asstMsg);
+
   db.close();
   return dbPath;
 }
@@ -98,7 +123,7 @@ describe('opencode parser integration', () => {
       const dbPath = createFixtureDb(tmpDir);
       const sessions = parseOpencodeSessions(dbPath);
 
-      assert.strictEqual(sessions.length, 2, 'should find two sessions');
+      assert.strictEqual(sessions.length, 3, 'should find three sessions');
 
       // Session 1: with JSON model and non-global project
       const s1 = sessions.find(x => x.id === 'ses_001');
@@ -122,6 +147,28 @@ describe('opencode parser integration', () => {
       assert.strictEqual(s2.model, 'unknown', 'null model should become unknown');
       assert.strictEqual(s2.project, 'other', 'a session with no recoverable file paths falls back to "other"');
 
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  // Regression: session.model was NULL on two real April sessions, so 31.8M
+  // tokens read as model "unknown" and priced $2.02 against ccusage's $8.24 —
+  // the tokens were deepseek-v4-pro's all along, recorded on the messages.
+  it('recovers the model from messages when session.model is null', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-model-'));
+    try {
+      const dbPath = createFixtureDb(tmpDir);
+      const sessions = parseOpencodeSessions(dbPath);
+
+      const s = sessions.find(x => x.id === 'ses_003');
+      assert.ok(s, 'session with null model should still be parsed');
+      assert.strictEqual(s.model, 'deepseek-v4-pro', 'model recovered from messages');
+
+      // A session with neither a model column nor messages stays 'unknown'
+      // rather than inheriting someone else's model.
+      const noMsgs = sessions.find(x => x.id === 'ses_002');
+      assert.strictEqual(noMsgs.model, 'unknown');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
