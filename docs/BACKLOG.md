@@ -7,7 +7,7 @@ domain. Markdown checkboxes; edit by hand. Shipped items go to
 ## Now
 
 Items we're actively working on or planning to do imminently.
-- [ ] **[bug]** Codex parser disagrees with ccusage on model attribution — reconcile (2026-07-27) shows every Claude model matching to the cent, but Codex does not: we report gpt-5.6-terra at 642M tokens/$208 where ccusage sees 5.5M/$3.09, and gpt-5.6-sol at $43 where ccusage sees $144. Totals: ours $252 vs ccusage $148 across Codex. Token counts disagree, so this is model ATTRIBUTION in packages/ingest/src/parsers/codex.js, not pricing — likely reading the wrong model field from the rollout, or the session-level model rather than per-turn. ~3.5% of the headline number. Repro: node scripts/reconcile.mjs <!-- added 2026-07-27 -->
+- [ ] **[bug]** opencode parser leaves 2 April sessions at model `unknown` — reconcile (2026-07-28) shows deepseek-v4-pro at ours $6.22 vs ccusage $8.24, with a matching 31.8M tokens/$2.02 sitting under `unknown`. One-to-one swap, so it is model ATTRIBUTION in packages/ingest/src/parsers/opencode.js, not pricing. Only 2 of 27 opencode deepseek sessions are affected (ses_22feaf0e… and ses_230edc28…, both 2026-04-27), so it is likely an early-schema difference in how those rows record the model. Pre-existing — it was masked by the larger Codex drift until that was fixed. Repro: node scripts/reconcile.mjs <!-- added 2026-07-28 -->
 
 ## Soon
 
