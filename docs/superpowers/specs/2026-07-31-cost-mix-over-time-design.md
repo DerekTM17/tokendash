@@ -97,6 +97,25 @@ The band breaks across the mid-May gap rather than drawing a smooth line across
 five weeks where nothing happened — the same honesty problem as the $1 weeks.
 Leading and trailing gaps are not filled.
 
+### Share / Dollars toggle
+
+A second toggle switches what the stacked band measures. Default is **Share**.
+
+- **Share** — the four components normalized to 100% per bucket. Y-axis 0–100%.
+  This is the habit view: it answers whether cache share is trending down.
+  The total-cost bar row is shown.
+- **Dollars** — the same four components stacked as absolute dollars. Y-axis in
+  dollars. This answers where the money actually went, and makes a heavy week
+  look heavy.
+
+**The bar row is hidden in Dollars mode.** It exists only to restore the
+magnitude that normalizing throws away; in Dollars mode the stacked height *is*
+the bucket total, so the bar row would restate it. Hiding it also frees the
+secondary y-axis.
+
+The two toggle groups (Week/Day, Share/Dollars) sit together in the panel
+header, which must wrap on narrow viewports rather than crowd the title.
+
 ### Scope decisions taken deliberately
 
 **No tool filter.** Tool mix is a real confound in principle — Codex bills
@@ -105,10 +124,6 @@ Claude bills writes at 1.25×/2× — so a Codex-heavy week would show lower cac
 share with no habit change. In practice it does not matter: Claude is $7,436 of
 $7,786 (95.5%), Codex $342 (4.4%), opencode $8 (0.1%). No realistic shift in mix
 can move the line. Revisit only if Codex share grows past ~20%.
-
-**No dollars/share toggle.** Absolute cost by component over the filtered range
-is already available from `Where the cost goes` plus the global `DateFilter`.
-The bar row and the tooltip cover magnitude.
 
 **`UsageChart` is not refactored** to share the new bucketing module. It works;
 that is unrelated cleanup.
@@ -120,9 +135,10 @@ that is unrelated cleanup.
   count, and a `partial` flag — true for the single bucket containing the
   current date, which is still accumulating. Pure, no React, no recharts.
 - **`src/components/CostMixTrend.jsx`** — thin renderer. A recharts
-  `ComposedChart`: four 100%-stacked `Area`s for share, plus one `Bar` on a
-  secondary axis for bucket total dollars. Week/Day toggle reusing the
-  `ToggleButton` pattern from `UsageChart.jsx`.
+  `ComposedChart`: four stacked `Area`s, plus one `Bar` on a secondary axis for
+  bucket total dollars (Share mode only). Two toggle groups — Week/Day and
+  Share/Dollars — reusing the `ToggleButton` pattern from `UsageChart.jsx`.
+  Both toggles are local component state; neither affects other panels.
 - **`App.jsx`** — left column, directly below `CostComposition`, `delay={265}`.
 
 The split exists because the arithmetic is the part that can be wrong
@@ -137,9 +153,17 @@ Same four colors and stack order as `CostComposition`: cache read `#5cc8ff`,
 cache write `#b48cff`, output `#ff8a3d`, input `#34e6a4`. The same component
 must not change color between two panels on the same screen.
 
-Y-axis pinned 0–100%. Cost bars sit in a muted band at the bottom on their own
-axis. Tooltip shows each component's percentage *and* dollars, the bucket total,
-and the session count; the current in-progress bucket is marked partial.
+Y-axis is pinned 0–100% in Share mode and auto-scaled dollars in Dollars mode.
+Cost bars sit in a muted band at the bottom on their own axis, Share mode only.
+
+The tooltip is identical in both modes — each component's percentage *and*
+dollars, the bucket total, and the session count — so switching modes never
+loses information, only changes emphasis. The current in-progress bucket is
+marked partial.
+
+Because `bucketCostMix` already returns both dollars and percentages per bucket,
+the toggle is pure rendering: no recomputation, no second code path through the
+arithmetic.
 
 ### Testing
 
@@ -156,13 +180,15 @@ TDD — each test written failing first.
 - the partial flag marks only the in-progress bucket
 
 `test/CostMixTrend.test.jsx` stays a smoke test in the existing house style:
-renders, empty state, toggle switches granularity.
+renders, empty state, Week/Day switches granularity, Share/Dollars switches
+mode, and the cost bar row is absent in Dollars mode.
 
 ### Success criteria
 
-The panel renders weekly cost-mix share with a total-cost bar row, the numbers
-match the table above, `npm test` passes with the new tests, and the dashboard
-still serves 200 on :5199.
+The panel defaults to weekly cost-mix share with a total-cost bar row and the
+numbers match the table above; both toggles work and Dollars mode drops the bar
+row; `npm test` passes with the new tests; the dashboard still serves 200 on
+:5199.
 
 ## Phase B — Habit trend panel (plan separately)
 
