@@ -44,3 +44,44 @@ npm test
 node scripts/reconcile.mjs          # runs ccusage fresh; expect Codex-only drift
 ./scripts/autostart.sh              # only needed after editing packages/ingest/src
 ```
+
+## 2026-07-28
+
+#### Handoff — Model attribution reconciles across every tool
+
+**Goal** — Close the one open `Now` item (Codex disagreeing with ccusage on model attribution), then fix whatever that unmasked.
+
+**Done** (all on `main`, tree clean, HEAD `5fe6463`)
+
+- `6842ee4` — **Codex parser, two independent defects.** (1) The model was latched from the FIRST `turn_context` and the whole cumulative counter billed to it; 10 of 40 local rollouts switch models mid-session, which is what put 642M tokens on `gpt-5.6-terra`. Now tracks the active model and emits one session row per model (`__<model>` id suffix only on a split, same rule as `claude.js`). (2) Threads that inherit a conversation — subagent spawns (`source.subagent.thread_spawn`) and resumes — **replay the parent's entire transcript into the new rollout at file-open**, re-stamped with the open timestamp; 787 of 800 token_count events in one real file were the parent's. That billed the parent's history once per child. Anything inside a 2s window from file open is now treated as inherited: counter tracked, not billed.
+- `a957230` — **opencode parser + a guard hole.** Two April sessions had a NULL `model` column on the session row, so 31.8M tokens read as `unknown` at $2.02 vs ccusage's $8.24. The model was on every assistant message as `modelID`, so `parseModel` now falls back to the dominant message-level model. Separately, `normalize()` now returns `unknownModelSessions` and ingest warns on it.
+- Changelog shipped via `ledger ship` for both (`10307d0`, `84972f3`); BACKLOG `Now` emptied (`83bda6e`, `5fe6463`).
+
+Verified, not assumed:
+- `npm test` → 54 ingest + 35 dashboard, 0 failures. Four new regression tests, each written failing first.
+- `node scripts/reconcile.mjs` against a **fresh** ccusage run → **all 11 models agree**, no `unknown` row at all. `terra` $3.09 vs $3.09 (was $208), `sol` exact, `deepseek-v4-pro` $8.24 vs $8.24. Total drift **+1.4% → −0.0%**.
+- Dashboard HTTP 200 on :5199, ingest watcher alive, `tokens.json` fresh, 0 unknown-model sessions.
+
+**Next** — Nothing is in flight; `Now` is empty. The two `Soon` items are both deliberately parked, and the more interesting one is a question rather than a build: **does the status line (`+$/turn`) actually change behaviour?** If it does, build the burn-rate + 5-hour block panel and the cache-efficiency panel (`rate_limits.five_hour` is already in the statusLine payload, so no new parsing). If it does not, more instrumentation will not help and the answer is structural — shorter sessions, more delegation. Do not build those panels before answering that.
+
+**Decisions** (settled — don't re-litigate)
+
+- Codex usage is the **DELTA of cumulative `total_token_usage`**, not its final value. The delta is what makes per-model attribution possible, and it absorbs repeated token_count emissions that re-report a call without advancing the counter (summing `last_token_usage` instead double-counts those ~3%).
+- The replay boundary is **time-based** (2s from file open) rather than lineage-based. Replayed events land in a sub-second burst while a thread's own first call is seconds later; the result is insensitive to the window — 500ms through 5000ms reconcile identically. A lineage/cumulative-key dedupe was tried and **rejected**: sibling subagents forking from the same point produce identical first-call sizes, so they collide and over-dedupe (it under-counted `sol` by 6.5%).
+- Unidentified models are counted **separately** from unpriced ones. They are different failures — no rate to add vs. the parser dropped the attribution — and conflating them is what hid the opencode bug.
+
+**Gotchas**
+
+- **`ccusage` is NOT deterministic on Codex.** It dedupes replayed events but its day-attribution is order-dependent: back-to-back runs moved its own totals 239.0M → 234.9M cache-read and shifted tokens between April and today. Compare **per-model totals, not per-day**, and always re-run it alongside our numbers rather than reusing a saved snapshot.
+- ccusage now ships as a **compiled native binary** — `src/cli.js` is a 5KB shim and there is no readable JS to consult as a reference implementation. Derive rules from the rollout data and use ccusage only as an oracle.
+- The reason the opencode bug survived months: the unpriced-model guard exempts **both** `model === 'unknown'` and any session carrying a cost, and opencode records its own cost — so those sessions hit both exemptions at once. A guard that exempts the "we don't know" case cannot detect attribution failures.
+- Still true from the previous session: **after editing anything in `packages/ingest/src`, run `./scripts/autostart.sh`** or the long-lived watcher keeps running old code and overwrites `tokens.json`.
+
+**Resume**
+
+```sh
+cd ~/opencode/projects/token-dashboard
+npm test                            # expect 54 ingest + 35 dashboard, 0 failures
+node scripts/reconcile.mjs          # runs ccusage fresh; expect all models within 2%
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5199/   # expect 200
+```
