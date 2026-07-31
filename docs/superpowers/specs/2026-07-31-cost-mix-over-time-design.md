@@ -43,8 +43,8 @@ Weekly is the default because daily share is dominated by single sessions. 57%
 of spend ($4,413 of $7,793) is ten sessions, so a day holding one of them reads
 as ~95% cache while a quiet day reads very differently — neither is a habit
 signal.
-Weekly gives ~14 points across the current history, enough to see a trend and
-coarse enough that one session cannot own a point.
+Weekly gives 14 slots across the current history of which 10 carry data — enough
+to see a trend, coarse enough that one session cannot own a point.
 
 Day key is `startedAt.slice(0, 10)`, matching the existing convention in
 `UsageChart.jsx`. Week key is the Sunday of that day. Consistency with the panel
@@ -93,9 +93,28 @@ and glanceability is the point of a dashboard panel); suppressing buckets below
 a cost floor (silently dropping data, and the floor is arbitrary).
 
 Interior empty buckets are filled with nulls so the x-axis stays linear in time.
-The band breaks across the mid-May gap rather than drawing a smooth line across
-five weeks where nothing happened — the same honesty problem as the $1 weeks.
-Leading and trailing gaps are not filled.
+The band breaks across the May gaps (2 weeks at 05-03/05-10, 2 weeks at
+05-24/05-31) rather than drawing a smooth line across weeks where nothing
+happened — the same honesty problem as the $1 weeks. Leading and trailing gaps
+are not filled.
+
+Nulls do break a stacked `Area` rather than being read as zero — confirmed in
+`recharts/lib/cartesian/Area.js:482`, where `isBreakPoint` covers
+`hasStack && getValueByDataKey(entry, dataKey) == null`, with `connectNulls`
+defaulting to false.
+
+**Isolated buckets must be dotted or they vanish.** A bucket with nulls on both
+sides has no neighbor to form a line segment, so its area path encloses nothing
+and renders invisible; recharts' `hasSinglePoint` fallback (`Area.js:342`)
+applies only when the *whole series* is one point. Weeks `2026-04-26` and
+`2026-05-17` are both isolated — so without a fix, the two weeks that motivate
+the magnitude design would silently disappear.
+
+Fix: `bucketCostMix` sets an **`isolated`** flag on any non-null bucket whose
+immediate neighbours are both null or absent. The `Area`s use a custom `dot`
+renderer that draws only for isolated buckets. This keeps the detection in the
+pure, tested module rather than in render code, and avoids dotting all ~95
+points in daily mode.
 
 ### Share / Dollars toggle
 
@@ -110,8 +129,14 @@ A second toggle switches what the stacked band measures. Default is **Share**.
 
 **The bar row is hidden in Dollars mode.** It exists only to restore the
 magnitude that normalizing throws away; in Dollars mode the stacked height *is*
-the bucket total, so the bar row would restate it. Hiding it also frees the
-secondary y-axis.
+the bucket total, so the bar row would restate it. The `<YAxis yAxisId="right">`
+must be unmounted along with the `<Bar>`, not just the bar itself, or an orphan
+axis reserves width for nothing.
+
+To keep the bars a *row* rather than a full-height chart, the right axis domain
+is `[0, max(total) * 4]`, confining bars to the bottom ~25%. The axis itself is
+hidden. Without an inflated domain recharts scales bars to full height and they
+compete with the share band.
 
 The two toggle groups (Week/Day, Share/Dollars) sit together in the panel
 header, which must wrap on narrow viewports rather than crowd the title.
@@ -121,12 +146,13 @@ header, which must wrap on narrow viewports rather than crowd the title.
 **No tool filter.** Tool mix is a real confound in principle — Codex bills
 cached input at 0.1× and charges nothing separately for cache writes, while
 Claude bills writes at 1.25×/2× — so a Codex-heavy week would show lower cache
-share with no habit change. In practice it does not matter: Claude is $7,436 of
-$7,786 (95.5%), Codex $342 (4.4%), opencode $8 (0.1%). No realistic shift in mix
-can move the line. Revisit only if Codex share grows past ~20%.
+share with no habit change. In practice it does not matter: Claude is 95.5% of
+spend, Codex 4.4%, opencode 0.1%. No realistic shift in mix can move the line.
+Revisit only if Codex share grows past ~20%.
 
-**`UsageChart` is not refactored** to share the new bucketing module. It works;
-that is unrelated cleanup.
+**`UsageChart` keeps its own inline bucketing.** The only change to it is
+importing the extracted `ToggleButton`. It is not refactored to share the new
+bucketing module — it works, and that is unrelated cleanup.
 
 ### Components
 
@@ -136,9 +162,14 @@ that is unrelated cleanup.
   current date, which is still accumulating. Pure, no React, no recharts.
 - **`src/components/CostMixTrend.jsx`** — thin renderer. A recharts
   `ComposedChart`: four stacked `Area`s, plus one `Bar` on a secondary axis for
-  bucket total dollars (Share mode only). Two toggle groups — Week/Day and
-  Share/Dollars — reusing the `ToggleButton` pattern from `UsageChart.jsx`.
-  Both toggles are local component state; neither affects other panels.
+  bucket total dollars (Share mode only). Two toggle groups, Week/Day and
+  Share/Dollars. Both toggles are local component state; neither affects other
+  panels.
+- **`src/components/ToggleButton.jsx`** — extracted from `UsageChart.jsx:69`,
+  which currently declares it as a module-private function with only a default
+  export of the chart. Two panels needing the identical control is the point at
+  which it stops being local. `UsageChart` is updated to import it; the button's
+  markup and styling do not change.
 - **`App.jsx`** — left column, directly below `CostComposition`, `delay={265}`.
 
 The split exists because the arithmetic is the part that can be wrong
@@ -174,6 +205,8 @@ TDD — each test written failing first.
 - one $699 session outweighs a hundred $0.08 sessions in a bucket's share
 - week bucketing, including the Saturday→Sunday boundary
 - interior gaps filled with nulls; leading and trailing gaps not filled
+- `isolated` is true for a bucket flanked by nulls on both sides, false for one
+  with any non-null neighbour, and true for a lone bucket at either end
 - percentages sum to 100 within a bucket
 - empty input
 - sessions missing `startedAt` or `costParts` are skipped
@@ -232,8 +265,11 @@ it.
 - Does context-per-call belong in the same panel as cache share, or its own?
 - Is per-session or per-call the more actionable unit?
 - Should main sessions and subagent sessions be trended separately? They have
-  very different shapes (62 main sessions / $5,595 vs 2,267 subagent sessions /
-  $1,212), and mixing them may wash out the signal.
+  very different shapes, and mixing them may wash out the signal. Note this
+  needs a **second** ingest field, not just `apiCalls`: the normalized session
+  carries no main-vs-subagent flag, and the counts quoted in earlier analysis
+  (62 main / 2,267 subagent) no longer sum to the current session total, so
+  that split cannot be reconstructed after the fact.
 
 ## Operational note
 
