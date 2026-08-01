@@ -166,7 +166,7 @@ export default function CostMixTrend({ sessions, delay = 0 }) {
                   fill={`url(#mix_${part.key})`}
                   strokeWidth={1.75}
                   stackId="mix"
-                  dot={props => <IsolatedDot {...props} color={part.color} />}
+                  dot={({ key, ...rest }) => <IsolatedDot key={key} {...rest} color={part.color} />}
                   activeDot={{ r: 3.5, fill: part.color, stroke: 'var(--color-card)', strokeWidth: 2 }}
                   isAnimationActive={false}
                 />

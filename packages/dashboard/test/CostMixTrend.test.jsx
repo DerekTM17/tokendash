@@ -65,14 +65,23 @@ describe('CostMixTrend', () => {
     expect(container.querySelector('.recharts-area')).toBeTruthy();
   });
 
-  it('draws a dot for an isolated bucket', () => {
-    // A lone week with nothing adjacent has no neighbour to form a line
-    // segment with, so without the dot it renders as an invisible path.
-    const lone = [{
-      startedAt: '2026-07-26T10:00:00Z',
-      costParts: { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 },
-    }];
-    const { container } = render(<CostMixTrend sessions={lone} />);
-    expect(container.querySelector('.recharts-area-dots circle')).toBeTruthy();
+  it('dots an isolated bucket and leaves connected ones undotted', () => {
+    // 2026-06-07 stands alone; 2026-07-19 and 2026-07-26 are adjacent. Only the
+    // lone week has no neighbour to form a line segment with, so only it would
+    // otherwise render as an invisible zero-area path.
+    const gapped = [
+      { startedAt: '2026-06-07T10:00:00Z', costParts: { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 } },
+      { startedAt: '2026-07-19T10:00:00Z', costParts: { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 } },
+      { startedAt: '2026-07-26T10:00:00Z', costParts: { input: 1, output: 10, cacheRead: 70, cacheWrite: 19 } },
+    ];
+    const { container } = render(<CostMixTrend sessions={gapped} />);
+    // One dot per stacked Area, for the isolated bucket only.
+    expect(container.querySelectorAll('.recharts-area-dots circle')).toHaveLength(4);
+  });
+
+  it('draws no dots when every bucket has a live neighbour', () => {
+    // This is what fails if someone "fixes" the isolated case with dot={true}.
+    const { container } = render(<CostMixTrend sessions={sessions} />);
+    expect(container.querySelectorAll('.recharts-area-dots circle')).toHaveLength(0);
   });
 });
