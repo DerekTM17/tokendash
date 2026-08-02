@@ -4,17 +4,9 @@ import {
   CartesianGrid, ResponsiveContainer,
 } from 'recharts';
 import { bucketCostMix } from '../lib/costMix';
-import { formatCost } from '../lib/format';
+import { formatCost, formatAxisDollars } from '../lib/format';
+import { PARTS } from '../lib/costParts';
 import ToggleButton from './ToggleButton';
-
-// Same order and colours as CostComposition — the same component changing
-// colour between two panels on one screen would read as a bug.
-const PARTS = [
-  { key: 'cacheRead', label: 'Cache read', color: '#5cc8ff' },
-  { key: 'cacheWrite', label: 'Cache write', color: '#b48cff' },
-  { key: 'output', label: 'Output', color: '#ff8a3d' },
-  { key: 'input', label: 'Input', color: '#34e6a4' },
-];
 
 function bucketLabel(key, granularity) {
   const date = new Date(key + 'T00:00:00Z').toLocaleDateString('en-US', {
@@ -31,7 +23,7 @@ function IsolatedDot({ cx, cy, payload, color }) {
   return <circle cx={cx} cy={cy} r={2.5} fill={color} stroke="var(--color-card)" strokeWidth={1} />;
 }
 
-function CostMixTooltip({ active, payload, granularity }) {
+export function CostMixTooltip({ active, payload, granularity }) {
   if (!active || !payload?.length) return null;
   const bucket = payload[0]?.payload;
   if (!bucket || bucket.total === null) return null;
@@ -60,13 +52,32 @@ function CostMixTooltip({ active, payload, granularity }) {
           </span>
         </div>
       ))}
-      <div style={{ borderTop: '1px solid var(--color-border-light)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: 'var(--f-body)', fontSize: 11, color: 'var(--color-text)', fontWeight: 600 }}>
-          Total · {bucket.sessionCount} session{bucket.sessionCount === 1 ? '' : 's'}
-        </span>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--color-text)', fontWeight: 600 }}>
-          {formatCost(bucket.total)}
-        </span>
+      <div style={{ borderTop: '1px solid var(--color-border-light)', marginTop: 8, paddingTop: 8 }}>
+        {/* Combined cacheRead + cacheWrite share — the single figure this
+            panel exists to show. MetricsStrip headlines it as "cache % of
+            cost"; without this row a reader has to add the two bands above
+            by hand. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 16 }}>
+          <span style={{ fontFamily: 'var(--f-body)', fontSize: 11, color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+            Cache
+          </span>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+            <span className="mono" style={{ fontSize: 10.5, color: 'var(--color-text-muted)' }}>
+              {bucket.cachePct.toFixed(1)}%
+            </span>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--color-text)', fontWeight: 500 }}>
+              {formatCost(bucket.cacheRead + bucket.cacheWrite)}
+            </span>
+          </span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: 'var(--f-body)', fontSize: 11, color: 'var(--color-text)', fontWeight: 600 }}>
+            Total · {bucket.sessionCount} session{bucket.sessionCount === 1 ? '' : 's'}
+          </span>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--color-text)', fontWeight: 600 }}>
+            {formatCost(bucket.total)}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -137,7 +148,7 @@ export default function CostMixTrend({ sessions, delay = 0 }) {
                 tickLine={false}
                 axisLine={{ stroke: 'var(--color-border)' }}
                 minTickGap={40}
-                tickFormatter={key => new Date(key + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
+                tickFormatter={key => bucketLabel(key, 'day')}
               />
               <YAxis
                 yAxisId="left"
@@ -146,7 +157,7 @@ export default function CostMixTrend({ sessions, delay = 0 }) {
                 tickLine={false}
                 axisLine={false}
                 width={48}
-                tickFormatter={v => (share ? `${v}%` : `$${v >= 10 ? v.toFixed(0) : v.toFixed(1)}`)}
+                tickFormatter={v => (share ? `${v.toFixed(0)}%` : formatAxisDollars(v))}
               />
               {/* Inflated domain keeps the bars a row along the bottom rather
                   than a full-height chart competing with the band. */}

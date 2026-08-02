@@ -1,12 +1,6 @@
 import { useMemo } from 'react';
 import { formatCost } from '../lib/format';
-
-const PARTS = [
-  { key: 'cacheRead', label: 'Cache read', color: '#5cc8ff' },
-  { key: 'cacheWrite', label: 'Cache write', color: '#b48cff' },
-  { key: 'output', label: 'Output', color: '#ff8a3d' },
-  { key: 'input', label: 'Input', color: '#34e6a4' },
-];
+import { PARTS } from '../lib/costParts';
 
 export default function CostComposition({ sessions, delay = 0 }) {
   const { agg, total } = useMemo(() => {

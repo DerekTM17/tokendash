@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
-import { formatTokens, formatCost } from '../lib/format';
+import { formatTokens, formatCost, formatAxisDollars } from '../lib/format';
 import ToggleButton from './ToggleButton';
 
 function groupByDayAndTool(sessions) {
@@ -70,9 +70,7 @@ const renderLegend = ({ payload }) => (
 export default function UsageChart({ sessions, delay = 0 }) {
   const [metric, setMetric] = useState('tokens');
   const data = useMemo(() => groupByDayAndTool(sessions), [sessions]);
-  const fmtAxis = metric === 'cost'
-    ? (v => `$${v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2)}`)
-    : formatTokens;
+  const fmtAxis = metric === 'cost' ? formatAxisDollars : formatTokens;
   const keySuffix = metric === 'cost' ? 'Cost' : '';
 
   return (

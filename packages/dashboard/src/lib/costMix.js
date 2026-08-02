@@ -45,6 +45,14 @@ function emptyBucket(key) {
 
 function finalize(bucket) {
   const total = COMPONENTS.reduce((sum, c) => sum + bucket[c], 0);
+  // A bucket can have sessions but sum to exactly $0 (a free or local model).
+  // total === 0 must NOT fall through to the percentage math below: that would
+  // yield all-0 percentages and total: 0, which recharts renders as a hard
+  // dive to 0% instead of a break in the band — the most flattering value on
+  // the chart for what is actually a data gap. Route it through the same
+  // null-contract shape as a bucket nothing landed in, but keep the real
+  // session count so the tooltip and isolation logic still see it happened.
+  if (total === 0) return { ...emptyBucket(bucket.key), sessionCount: bucket.sessionCount };
   const pct = value => (total ? (value / total) * 100 : 0);
   return {
     ...bucket,

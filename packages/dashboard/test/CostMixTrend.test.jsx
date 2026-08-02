@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import CostMixTrend from '../src/components/CostMixTrend';
+import CostMixTrend, { CostMixTooltip } from '../src/components/CostMixTrend';
 
 // jsdom reports zero size for every element, so recharts' ResponsiveContainer
 // renders nothing and any assertion about chart internals passes vacuously.
@@ -32,8 +32,12 @@ const sessions = [
 
 describe('CostMixTrend', () => {
   it('renders a chart when there is data', () => {
+    // The mock's wrapper div carries `.recharts-responsive-container`
+    // regardless of whether the chart underneath actually mounted, so that
+    // class proves nothing. Assert on something only a real mount produces:
+    // one Area per cost component.
     const { container } = render(<CostMixTrend sessions={sessions} />);
-    expect(container.querySelector('.recharts-responsive-container')).toBeTruthy();
+    expect(container.querySelectorAll('.recharts-area')).toHaveLength(4);
   });
 
   it('renders the empty state', () => {
@@ -83,5 +87,72 @@ describe('CostMixTrend', () => {
     // This is what fails if someone "fixes" the isolated case with dot={true}.
     const { container } = render(<CostMixTrend sessions={sessions} />);
     expect(container.querySelectorAll('.recharts-area-dots circle')).toHaveLength(0);
+  });
+});
+
+// CostMixTooltip needs no recharts to render — it's a plain function of
+// `payload`/`active`/`granularity` props — so it's tested directly here
+// rather than only indirectly through the chart above.
+describe('CostMixTooltip', () => {
+  const bucket = {
+    key: '2026-07-26',
+    input: 1, output: 2, cacheRead: 6, cacheWrite: 1,
+    total: 10,
+    inputPct: 10, outputPct: 20, cacheReadPct: 60, cacheWritePct: 10,
+    cachePct: 70,
+    sessionCount: 2,
+    partial: false,
+    isolated: false,
+  };
+
+  function renderTooltip(overrides = {}) {
+    const b = { ...bucket, ...overrides };
+    return render(
+      <CostMixTooltip active payload={[{ payload: b }]} granularity="week" />,
+    );
+  }
+
+  it('renders the four component rows with both percentage and dollars', () => {
+    const { container } = renderTooltip();
+    expect(container.textContent).toContain('Cache read');
+    expect(container.textContent).toContain('Cache write');
+    expect(container.textContent).toContain('Output');
+    expect(container.textContent).toContain('Input');
+    expect(container.textContent).toContain('60.0%');
+    expect(container.textContent).toContain('$6.00');
+    expect(container.textContent).toContain('10.0%');
+    expect(container.textContent).toContain('20.0%');
+    expect(container.textContent).toContain('$2.00');
+    expect(container.textContent).toContain('$1.00');
+  });
+
+  it('shows the combined cache share and dollars', () => {
+    const { container } = renderTooltip();
+    expect(container.textContent).toContain('Cache');
+    expect(container.textContent).toContain('70.0%');
+    // cacheRead ($6) + cacheWrite ($1) combined.
+    expect(container.textContent).toContain('$7.00');
+  });
+
+  it('shows the "in progress" marker when partial, and hides it otherwise', () => {
+    const { container: partial } = renderTooltip({ partial: true });
+    expect(partial.textContent).toContain('in progress');
+
+    const { container: complete } = renderTooltip({ partial: false });
+    expect(complete.textContent).not.toContain('in progress');
+  });
+
+  it('returns null for a gap bucket', () => {
+    const { container } = renderTooltip({ total: null });
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('pluralises the session count', () => {
+    const { container: one } = renderTooltip({ sessionCount: 1 });
+    expect(one.textContent).toContain('1 session');
+    expect(one.textContent).not.toContain('1 sessions');
+
+    const { container: two } = renderTooltip({ sessionCount: 2 });
+    expect(two.textContent).toContain('2 sessions');
   });
 });

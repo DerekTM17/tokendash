@@ -3,6 +3,13 @@ export function formatCost(cost) {
   return `$${Number(cost).toFixed(2)}`;
 }
 
+/** Three-tier precision for a dollar y-axis: whole dollars once the values are
+ *  big enough that cents are noise, one decimal in the middle range, two
+ *  decimals only when values are sub-dollar and need the extra resolution. */
+export function formatAxisDollars(v) {
+  return `$${v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2)}`;
+}
+
 export function formatTokens(tokens) {
   if (tokens >= 1e9) return `${(tokens / 1e9).toFixed(1)}B`;
   if (tokens >= 1e6) return `${(tokens / 1e6).toFixed(1)}M`;

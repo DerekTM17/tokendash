@@ -113,6 +113,27 @@ describe('bucketCostMix', () => {
     expect(bucketCostMix(sessions, 'week', '2026-07-31')[0].isolated).toBe(true);
   });
 
+  it('breaks the band instead of diving to zero when a bucket has sessions but $0 total', () => {
+    // A free or local model: sessions happened, but every cost part is 0.
+    // total must come back null (not 0) so the Area breaks the band rather
+    // than rendering a hard dive to 0% — which would read as "0% cache",
+    // the most flattering value on the chart.
+    const sessions = [
+      session('2026-07-26T10:00:00Z', { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+      session('2026-07-26T11:00:00Z', { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+    ];
+
+    const [week] = bucketCostMix(sessions, 'week', '2026-07-31');
+
+    expect(week.total).toBeNull();
+    expect(week.inputPct).toBeNull();
+    expect(week.outputPct).toBeNull();
+    expect(week.cacheReadPct).toBeNull();
+    expect(week.cacheWritePct).toBeNull();
+    expect(week.cachePct).toBeNull();
+    expect(week.sessionCount).toBe(2);
+  });
+
   it('marks only the bucket containing today as partial', () => {
     const sessions = [
       session('2026-07-19T10:00:00Z', { cacheRead: 10 }),
