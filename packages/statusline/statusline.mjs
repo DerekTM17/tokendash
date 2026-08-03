@@ -21,6 +21,7 @@
 // line. Never throws: a broken status line must not disrupt the session.
 
 import { priceForModel } from '../ingest/src/pricing.js';
+import { writeCtx } from '../hooks/lib/state.mjs';
 
 const C = {
   reset: '\x1b[0m', dim: '\x1b[2m',
@@ -83,6 +84,19 @@ function main(raw) {
     // cheap model is far less urgent than the same context on Fable.
     const color = perTurn >= 0.08 ? C.red : perTurn >= 0.04 ? C.yellow : C.dim;
     parts.push(`${color}+${fmtMoney(perTurn)}/turn${C.reset}`);
+  }
+
+  // Stamp context for the boundary detector. The statusline is the only place
+  // Claude Code hands us an authoritative context size, and it runs every turn.
+  // The alternative — parsing transcript_path — means reading up to 35MB of an
+  // internal format the docs warn can change on any release.
+  if (d.session_id) {
+    writeCtx(d.session_id, {
+      tokens: used,
+      pct: Math.round(pct),
+      model: d.model?.id ?? null,
+      cacheRate: rate?.cacheRead ?? null,
+    });
   }
 
   const five = d.rate_limits?.five_hour;
