@@ -82,14 +82,19 @@ export function writeState(sessionId, state) {
   }
 }
 
-/** Delete state files untouched for maxAgeDays. Returns how many were removed. */
+/**
+ * Delete state files untouched for maxAgeDays. Returns how many were removed.
+ * Also sweeps orphaned `.tmp` files from writeAtomic — a process killed
+ * between writeFileSync and renameSync leaves one behind, and the statusline
+ * writes a .ctx every turn, so these can accumulate fast without this.
+ */
 export function gcState(maxAgeDays) {
   let removed = 0;
   try {
     const d = stateDir();
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
     for (const name of fs.readdirSync(d)) {
-      if (!/\.(ctx|json)$/.test(name)) continue;
+      if (!/\.(ctx|json|tmp)$/.test(name)) continue;
       const f = path.join(d, name);
       try {
         if (fs.statSync(f).mtimeMs < cutoff) {
