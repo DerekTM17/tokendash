@@ -85,3 +85,47 @@ npm test                            # expect 54 ingest + 35 dashboard, 0 failure
 node scripts/reconcile.mjs          # runs ccusage fresh; expect all models within 2%
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5199/   # expect 200
 ```
+
+## 2026-08-03
+
+#### Handoff — Cost mix over time panel (Phase A of the habit-trend work)
+
+**Goal** — The dashboard could say *how much* of spend is cache traffic (88.9%) but not whether that number was moving, so an improving habit and a quiet week looked identical. Build a panel showing the `Where the cost goes` breakdown as a trend.
+
+**Done** (all on `main`, tree clean, HEAD `58dd3a9`)
+
+Shipped as a 6-commit branch, fast-forward merged, branch deleted. New files: `src/lib/costMix.js`, `src/lib/costParts.js`, `src/components/CostMixTrend.jsx`, `src/components/ToggleButton.jsx`, plus `formatAxisDollars` in `src/lib/format.js`. **No ingest changes** — the panel reads `session.costParts`, which `normalizer.js` already emits.
+
+The panel: weekly (toggleable daily) cost-weighted share of the four cost components, with a Share/Dollars toggle and a total-cost bar row along the bottom in Share mode. Mounted in `App.jsx` at `delay={265}`, between `CostComposition` and `ActivityHeatmap`, consuming `filtered` so the global DateFilter applies.
+
+Verified, not assumed:
+- `npm test` on the merged `main` → **54 ingest + 61 dashboard, 0 failures**. Run personally, not taken from a subagent report.
+- Browser-verified personally at :5199 across all three modes: Share (band full height, y-axis 0–100%, 15 weekly bars), Dollars (bars and right axis both unmount, **no layout jump** — grid `x=56 w=707` identical in both modes), Day (97 buckets, 16 dots, no crash). Bar row measured at **24.9%** of plot height, matching the `[0, maxTotal*4]` domain.
+- Real-data check reproduces the design-time table: cache% runs 93 → 90 → 93 → 85 → 85 → 90 → 82 across the substantive weeks, with three weeks at $1–$3.
+
+**Next** — **Phase B**, already specced at `docs/superpowers/specs/2026-07-31-cost-mix-over-time-design.md` (Phase B section) and in BACKLOG under Soon. It measures the driver instead of the proxy: context per API call and cost per call. Concretely, the first move is adding an `apiCalls` count to the normalized session by counting usage-bearing assistant events in each parser — `claude.js` (messages carrying `usage`), `opencode.js` (assistant message rows; the session row has only aggregates), `codex.js` (`token_count` events that advance the counter, reusing the existing 2s replay window). Phase B has NOT been brainstormed as its own spec yet; the design doc's Phase B section is an outline with three open questions, not a plan.
+
+**Decisions** (settled — don't re-litigate)
+
+- **Share is cost-weighted per bucket**, never a mean of per-session percentages. Ten sessions are 57% of all spend, so averaging would let a $0.08 subagent session count as much as a $699 one.
+- **Weekly is the default bucket**, not daily and not a 7-day rolling window. Daily share is dominated by single sessions; "the week ending here" is harder to reason about and leaves the first six days undefined.
+- **Gap buckets carry `null`, not zero.** Recharts breaks a stacked Area on null (`Area.js:482`, `connectNulls` defaults false), which honestly shows a gap; zero would draw the band diving to the floor. A bucket with sessions but exactly $0 also routes to the null contract, keeping its real `sessionCount`.
+- **The total-cost bar row is Share-mode only.** It exists to restore the magnitude that normalizing discards; in Dollars mode the stacked height already *is* the total.
+- **No tool filter.** Tool mix is a real confound in principle (Codex charges nothing separately for cache writes) but Claude is 95.5% of spend, so no realistic shift can move the line. Revisit only above ~20% Codex.
+- **Legend shows a 5th item "Total cost"** despite `legendType="none"` on the `<Bar>` — recharts 2.15.4 does not honour `legendType` when a custom Legend `content` renderer is used. Kept deliberately: the grey bars are otherwise unexplained.
+
+**Gotchas**
+
+- **jsdom reports zero size, so recharts renders no children and chart assertions pass vacuously.** `CostMixTrend.test.jsx` mocks `ResponsiveContainer` to a fixed 800x300 to get real output. `UsageChart.test.jsx` has no such mock, so its two chart assertions are green regardless — logged in BACKLOG. Do not delete that mock thinking it is scaffolding.
+- **An isolated bucket renders as an invisible zero-area path.** With nulls on both sides there is no neighbour to form a line segment, and recharts' `hasSinglePoint` fallback (`Area.js:376`) only applies when the *whole series* is one point. `bucketCostMix` therefore flags `isolated` and the Areas dot only those. Fixing this by always setting `dot={true}` would draw ~380 dots in daily mode — the tests deliberately fail under that shortcut.
+- **A tick formatter cannot influence recharts' tick generation.** The Share y-axis settles to an uneven `0/30/60/100` and needs an explicit `ticks={...}` to pin it (BACKLOG). Separately, the Share branch of the formatter originally had no rounding where the Dollars branch did, which is how a raw `100.0000001%` reached the browser — that one is fixed.
+- Recharts passes the data entry as `payload` to an Area's `dot` render *function* (it does not `cloneElement` a function dot). Destructure `key` out before spreading into a custom dot or React warns.
+- Still true: **after editing anything in `packages/ingest/src`, run `./scripts/autostart.sh`** or the long-lived watcher keeps running old code and overwrites `tokens.json`. Phase A did not touch ingest; **Phase B will**, so this bites again.
+
+**Resume**
+
+```sh
+cd ~/opencode/projects/token-dashboard
+npm test                            # expect 54 ingest + 61 dashboard, 0 failures
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5199/   # expect 200
+```
