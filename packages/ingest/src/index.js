@@ -41,7 +41,8 @@ function ingest() {
     }
   }
 
-  const { normalized, totals, unpricedModels, unknownModelSessions } = normalize(sessions, projects);
+  const { normalized, totals, unpricedModels, unknownModelSessions, overWindowSessions, callsByTool } =
+    normalize(sessions, projects);
 
   for (const [model, { sessions: n, tokens }] of Object.entries(unpricedModels)) {
     console.error(
@@ -58,6 +59,20 @@ function ingest() {
     );
   }
 
+  if (overWindowSessions.sessions) {
+    console.error(
+      `WARNING: ${overWindowSessions.sessions} session(s) report more context per API call than ` +
+        `the model's context window (worst: ${overWindowSessions.worst.toLocaleString()} tokens ` +
+        `on "${overWindowSessions.model}"). That is arithmetically impossible — the per-call ` +
+        `accounting has drifted, not the pricing.`
+    );
+  }
+
+  const callSummary = Object.entries(callsByTool)
+    .map(([tool, n]) => `${tool} ${n.toLocaleString()}`)
+    .join(', ');
+  console.error(`API calls counted: ${callSummary || 'none'}`);
+
   const output = {
     generated: new Date().toISOString(),
     tools: [...new Set(normalized.map(s => s.tool))],
@@ -67,7 +82,12 @@ function ingest() {
 
   const outDir = path.dirname(outputPath);
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(outputPath, JSON.stringify(output, null, 2));
+  // Compact, not indented. This file is a gitignored build artifact served to
+  // the browser, never read by a human in place — and indentation was 60% of
+  // its bytes (2.24MB pretty vs 1.40MB compact), which the per-day `daily`
+  // arrays made far worse since each row would otherwise cost 10 indented
+  // lines. Pipe it through `jq` if you need to read it.
+  fs.writeFileSync(outputPath, JSON.stringify(output));
   console.log(JSON.stringify({ status: 'ok', sessions: normalized.length, output: outputPath }));
   return output;
 }

@@ -1,6 +1,24 @@
 import { discoverProjects, matchProject } from './discovery.js';
 import { estimateCost, costBreakdown } from './pricing.js';
 
+// Per-model context windows, used only to flag impossible per-call context —
+// a delta-accounting regression shows up here immediately. Prefix-matched, and
+// a model matching nothing is SKIPPED rather than guessed: a wrong window would
+// manufacture false alarms, which is worse than a missing check.
+const CONTEXT_WINDOWS = [
+  // Claude Code runs the 1M-context beta; max observed per call is 999,722.
+  ['claude-', 1_000_000],
+  // Codex rollouts self-report model_context_window 258,400; max observed 236,013.
+  ['gpt-', 300_000],
+];
+
+function contextWindowFor(model) {
+  for (const [prefix, window] of CONTEXT_WINDOWS) {
+    if (model.startsWith(prefix)) return window;
+  }
+  return null;
+}
+
 function isZeroToken(s) {
   return !(s.inputTokens || s.outputTokens || s.cacheReadTokens || s.cacheWriteTokens);
 }
@@ -24,6 +42,64 @@ function splitCost(cost, s) {
     cacheRead: (cost * w.cacheRead) / total,
     cacheWrite: (cost * w.cacheWrite) / total,
   };
+}
+
+function weightOf(t) {
+  return (t.input || 0) * SPLIT_WEIGHTS.input
+    + (t.output || 0) * SPLIT_WEIGHTS.output
+    + (t.cacheRead || 0) * SPLIT_WEIGHTS.cacheRead
+    + (t.cacheWrite || 0) * SPLIT_WEIGHTS.cacheWrite;
+}
+
+// Costs are rounded to 8dp purely to keep tokens.json compact — a session's
+// day rows are emitted ~2,629 times across the corpus. The rounding is well
+// inside the epsilon the sum invariants are asserted at.
+const round8 = n => Math.round(n * 1e8) / 1e8;
+
+/**
+ * Turn a parser's per-day token slices into the emitted `daily` rows, pricing
+ * each day the same way the session total was priced so the days sum back to
+ * `costParts`.
+ *
+ * Estimated cost is linear in tokens, so per-day `costBreakdown` sums exactly.
+ * A source-reported cost has no per-day equivalent, so it is allocated across
+ * days by the same weights `splitCost` uses and then split within each day —
+ * which reduces to exactly `costParts` in the single-slice case, the only case
+ * that occurs today (opencode).
+ */
+function buildDaily(s, model, costEstimated, cost) {
+  const slices = s.dailyTokens || [];
+  if (!slices.length) return [];
+
+  const totalWeight = costEstimated ? 0 : slices.reduce((sum, d) => sum + weightOf(d), 0);
+
+  return slices.map(d => {
+    const asSession = {
+      model,
+      inputTokens: d.input || 0,
+      outputTokens: d.output || 0,
+      cacheReadTokens: d.cacheRead || 0,
+      cacheWriteTokens: d.cacheWrite || 0,
+      cacheWrite1hTokens: d.cacheWrite1h || 0,
+    };
+    let parts = costEstimated ? costBreakdown(asSession) : null;
+    if (!parts) {
+      const share = totalWeight ? (cost * weightOf(d)) / totalWeight : 0;
+      parts = splitCost(share, asSession);
+    }
+    return [
+      d.day,
+      d.calls || 0,
+      asSession.inputTokens,
+      asSession.outputTokens,
+      asSession.cacheReadTokens,
+      asSession.cacheWriteTokens,
+      round8(parts.input),
+      round8(parts.output),
+      round8(parts.cacheRead),
+      round8(parts.cacheWrite),
+    ];
+  });
 }
 
 export function normalize(sessions, projects) {
@@ -80,12 +156,13 @@ export function normalize(sessions, projects) {
       // Break cost into input/output/cache components for the composition view.
       if (!costParts) costParts = splitCost(cost, s);
 
+      const model = s.model || 'unknown';
       return {
         id: s.id,
         tool: s.tool,
         project,
         projectInferred,
-        model: s.model || 'unknown',
+        model,
         startedAt: s.startedAt || null,
         inputTokens: s.inputTokens || 0,
         outputTokens: s.outputTokens || 0,
@@ -95,6 +172,9 @@ export function normalize(sessions, projects) {
         cost,
         costEstimated,
         costParts,
+        apiCalls: s.apiCalls || 0,
+        isSubagent: !!s.isSubagent,
+        daily: buildDaily(s, model, costEstimated, cost),
         currency: s.currency || 'USD',
       };
     });
@@ -125,6 +205,35 @@ export function normalize(sessions, projects) {
     entry.tokens += tokens;
   }
 
+  // Two checks that CAN fire, unlike a "tokens but no apiCalls" counter: for
+  // claude and codex both quantities come from the same loop, so apiCalls >= 1
+  // whenever tokens > 0 by construction, and the converse is filtered by
+  // isZeroToken above. These catch the failures that are actually reachable.
+  //
+  // overWindow: a per-day context-per-call above the model's context window is
+  // arithmetically impossible, so it means the delta accounting drifted — the
+  // exact regression that once made Codex read ~3x high.
+  const overWindowSessions = { sessions: 0, worst: 0, model: null };
+  // callsByTool: a parser that silently stops counting shows up here as a step
+  // change instead of a flatline nobody notices.
+  const callsByTool = {};
+  for (const s of normalized) {
+    callsByTool[s.tool] = (callsByTool[s.tool] || 0) + s.apiCalls;
+    const window = contextWindowFor(s.model);
+    if (!window) continue;
+    for (const [, calls, input, , cacheRead, cacheWrite] of s.daily) {
+      if (!calls) continue;
+      const perCall = (input + cacheRead + cacheWrite) / calls;
+      if (perCall <= window) continue;
+      overWindowSessions.sessions += 1;
+      if (perCall > overWindowSessions.worst) {
+        overWindowSessions.worst = Math.round(perCall);
+        overWindowSessions.model = s.model;
+      }
+      break;
+    }
+  }
+
   const totals = normalized.reduce(
     (acc, s) => ({
       cost: acc.cost + s.cost,
@@ -134,5 +243,5 @@ export function normalize(sessions, projects) {
     { cost: 0, tokens: 0, sessions: 0 }
   );
 
-  return { normalized, totals, unpricedModels, unknownModelSessions };
+  return { normalized, totals, unpricedModels, unknownModelSessions, overWindowSessions, callsByTool };
 }
