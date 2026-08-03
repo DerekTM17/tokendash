@@ -1,5 +1,11 @@
 // packages/hooks/lib/stale-reads.mjs
-// Count file reads whose content is superseded by a later edit to the same path.
+// Count files whose in-context copy is superseded by a later edit to the same path.
+//
+// Walks the transcript in order, pairing each Read with the NEXT edit to the same
+// path (not just the first-ever read/edit — a re-read refreshes the copy in context,
+// and an edit consumes the outstanding read whether or not it clears the gap). Each
+// path counts at most once, since the directive this feeds says "N files", not "N
+// read events".
 //
 // Only called AFTER the decision to fire, so a full read of the transcript is
 // acceptable here (measured: ~0.04s for 8MB, against a 60s hook timeout). It is
@@ -7,11 +13,17 @@
 
 import fs from 'node:fs';
 
+// Why the gap threshold exists: measured across all main transcripts, 633 of 1,170
+// reads are followed by an edit to the same path, but the median gap is 2 entries
+// and 51.7% are <=2 — that's mandatory read-before-edit (Edit refuses to run without
+// a prior Read), not waste. Only a gap of 50+ entries means the content actually went
+// stale before it was acted on.
 const STALE_GAP_ENTRIES = Number(process.env.CTX_STALE_GAP_ENTRIES || 50);
 const EDITORS = new Set(['Edit', 'Write', 'NotebookEdit']);
 
 /**
- * @returns number of reads superseded by an edit at least `gapEntries` later.
+ * @returns number of distinct paths whose read was superseded by an edit at
+ *   least `gapEntries` later.
  */
 export function countStaleReads(transcriptPath, gapEntries = STALE_GAP_ENTRIES) {
   let lines;
@@ -21,8 +33,8 @@ export function countStaleReads(transcriptPath, gapEntries = STALE_GAP_ENTRIES) 
     return 0;
   }
 
-  const firstRead = new Map();   // path -> earliest read index
-  const firstEdit = new Map();   // path -> earliest edit index
+  const outstandingRead = new Map(); // path -> index of the most recent unconsumed read
+  const stalePaths = new Set();
 
   lines.forEach((line, idx) => {
     if (!line) return;
@@ -39,15 +51,17 @@ export function countStaleReads(transcriptPath, gapEntries = STALE_GAP_ENTRIES) 
       if (b?.type !== 'tool_use') continue;
       const p = b?.input?.file_path;
       if (typeof p !== 'string') continue;
-      if (b.name === 'Read' && !firstRead.has(p)) firstRead.set(p, idx);
-      else if (EDITORS.has(b.name) && !firstEdit.has(p)) firstEdit.set(p, idx);
+      if (b.name === 'Read') {
+        outstandingRead.set(p, idx); // a re-read refreshes the copy in context
+      } else if (EDITORS.has(b.name)) {
+        const readIdx = outstandingRead.get(p);
+        if (readIdx !== undefined) {
+          if (idx - readIdx >= gapEntries) stalePaths.add(p);
+          outstandingRead.delete(p); // the edit consumes the read either way
+        }
+      }
     }
   });
 
-  let stale = 0;
-  for (const [p, readIdx] of firstRead) {
-    const editIdx = firstEdit.get(p);
-    if (editIdx !== undefined && editIdx - readIdx >= gapEntries) stale++;
-  }
-  return stale;
+  return stalePaths.size;
 }

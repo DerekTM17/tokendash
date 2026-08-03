@@ -57,3 +57,42 @@ test('malformed lines are skipped, not fatal', () => {
     JSON.stringify(edit('/x.js'))].join('\n'));
   assert.equal(countStaleReads(f, 50), 1);
 });
+
+test('a fresh re-read after an early edit is still paired with the NEXT edit (undercount fix)', () => {
+  // Read(0) -> Edit(1) -> Read(2) -> 60 fillers -> Edit(63): the read at index 2
+  // is superseded 61 entries later, even though the *first-ever* edit (index 1)
+  // sits right next to the *first-ever* read (index 0).
+  const f = transcript('g.jsonl', [
+    read('/x.js'),
+    edit('/x.js'),
+    read('/x.js'),
+    ...Array(60).fill(0).map(filler),
+    edit('/x.js'),
+  ]);
+  assert.equal(countStaleReads(f, 50), 1);
+});
+
+test('a re-read shortly before an edit is not stale, even though the first-ever read was long ago (overcount fix)', () => {
+  // Read(0) -> 60 fillers -> Read(61) -> Edit(62): the copy in context was
+  // refreshed at index 61 and edited just 1 entry later, so it never went stale
+  // — even though the *first-ever* read (index 0) is 62 entries before the edit.
+  const f = transcript('h.jsonl', [
+    read('/x.js'),
+    ...Array(60).fill(0).map(filler),
+    read('/x.js'),
+    edit('/x.js'),
+  ]);
+  assert.equal(countStaleReads(f, 50), 0);
+});
+
+test('a path with two separate qualifying stale cycles still counts once', () => {
+  const f = transcript('i.jsonl', [
+    read('/x.js'),
+    ...Array(60).fill(0).map(filler),
+    edit('/x.js'),
+    read('/x.js'),
+    ...Array(60).fill(0).map(filler),
+    edit('/x.js'),
+  ]);
+  assert.equal(countStaleReads(f, 50), 1);
+});
