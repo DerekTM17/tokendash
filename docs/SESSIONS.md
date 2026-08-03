@@ -129,3 +129,42 @@ cd ~/opencode/projects/token-dashboard
 npm test                            # expect 54 ingest + 61 dashboard, 0 failures
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5199/   # expect 200
 ```
+
+#### Handoff — Session boundary detector: spec + implementation plan
+
+**Goal** — Build the missing *trigger* for `session-checkpoint`, so long sessions get cut automatically at task boundaries instead of relying on the user to notice.
+
+**Done** (design only — no implementation code exists yet)
+
+- `docs/superpowers/specs/2026-08-03-session-boundary-detector-design.md` — approved design (`1d11718`)
+- `docs/superpowers/plans/2026-08-03-session-boundary-detector.md` — Phase 1 plan, 8 tasks / 46 steps, TDD throughout, zero placeholders (`4f95362`)
+- Verified: `grep` for placeholder patterns returns 0 hits; working tree clean. **No code written, no tests run** — the plan's code blocks are unexecuted.
+
+**Next** — Execute the plan with `superpowers:subagent-driven-development`, one subagent per task, starting at Task 1 (`packages/hooks/lib/bands.mjs` + `test/bands.test.mjs`). The plan is self-contained; it does not need any of this session's analysis context. Task 7 (backtest) is the real gate — it exits 1 unless the thresholds hold against the 72 real transcripts, and the plan says to raise `CTX_ARM_TOKENS` rather than weaken the criteria.
+
+**Decisions** (settled — don't re-litigate)
+
+- **The metric is live context size, not "byte-turns."** Byte-turns (`bytes × turns resident`) was coined mid-analysis and then dropped: it assumes residency lasts to session end, but context is non-monotonic (one session ran 999k → 356k → 948k → 71k → 999k) because of compaction and silent tool-result eviction. `cache_read_input_tokens` prices residency directly with no modelling assumption.
+- **ARM 200k / CEILING 300k**, derived from break-even, not chosen for roundness. Session floor is 35,620 tokens, so a boundary costs ~50,525 weighted units and pays back in 3.1 turns at 200k, 1.9 at 300k. An earlier 100k arm was rejected: 7.8-turn payback, and it would arm on most sessions since median peak is 160k.
+- **Context comes from the statusline stamp, never from parsing `transcript_path`.** The statusline already receives authoritative `context_window.total_input_tokens` and runs every turn. Transcripts reach 35MB and their format is internal — the docs explicitly warn it changes between releases.
+- **Bands key off a monotonic high-water mark.** Banding on instantaneous context was simulated at **8.1 nudges per firing session**.
+- **A "continue" verdict does not consume the band.** Otherwise the model can silently disable the mechanism band by band with no record.
+- **Subagent cost (32.1% of weighted spend) is explicitly out of scope.** `UserPromptSubmit` never fires inside a subagent. Named as a known limit, not an oversight — and most of that spend is *good* (it keeps bulk out of the main context).
+- **Auto-restart (`initialUserMessage`) is Phase 2, not Phase 1.** Copy-paste has one accidental virtue: you glance at the prompt before pasting, so a bad handoff gets caught. Validate handoff quality first.
+
+**Gotchas** (each cost real time to find)
+
+- **`~/.claude/projects/` is NOT a corpus of user sessions.** Of 2,579 `.jsonl` files, **2,498 are `agent-*.jsonl` subagent transcripts** and 8 are journals — only **73** are main sessions. An entire first-pass analysis was computed over the unfiltered set and every threshold came out ~4x wrong. Always filter `basename !~ /^(agent-|journal)/`.
+- **The `UserPromptSubmit` payload field is `prompt`, NOT `user_input`.** The published docs page says `user_input` and is wrong. Verified in binary v2.1.220: `hook_event_name:"UserPromptSubmit",prompt:e`. Reading the wrong field yields `undefined` and silently disables the semantic gate. **Treat that docs page as unreliable** — it was wrong about this while being right about `initialUserMessage` (also verified in the binary).
+- **"Read then edited" is mostly correct behaviour, not waste.** 633 of 1,170 reads are superseded, but the median gap is **2 entries** and 51.7% are ≤2 — that is mandatory read-before-edit, since `Edit` refuses to run without a prior `Read`. Only a gap of ≥50 entries means anything.
+- **Auto-compact will not save you here.** On 1M-context models it fires at ~967k; only 8 of 72 sessions ever reach that, while 29 exceed 200k. The expensive band is entirely unprotected.
+- **The last line of a transcript is never a `usage` block** (sampled 40, zero hits), so any transcript-based context read needs a backward scan. Another reason the statusline stamp is the right source.
+
+**Resume**
+
+```sh
+cd ~/opencode/projects/token-dashboard
+git log --oneline -3                # expect 4f95362 plan, 1d11718 spec
+npm test                            # expect ingest + dashboard green (hooks suite does not exist yet)
+sed -n '1,60p' docs/superpowers/plans/2026-08-03-session-boundary-detector.md
+```
