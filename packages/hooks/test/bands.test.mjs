@@ -57,10 +57,24 @@ test('bands key off high-water, so a modest dip does not re-fire', () => {
   assert.equal(c.fire, false, 'still band 300, already fired');
 });
 
-test('a drop past DROP_RATIO resets fired bands', () => {
-  const a = nextState(EMPTY_STATE, 500_000, 10);   // fires band 300
-  const b = nextState(a.state, 280_000, 30);       // 280k < 500k * 0.6 -> reset
-  assert.deepEqual(b.state.firedBands, [275]);
-  assert.equal(b.state.highWater, 280_000);
-  assert.equal(b.fire, 'arm', 'post-compaction climb can fire again');
+test('a drop past DROP_RATIO resets high-water but does NOT re-arm fired bands', () => {
+  const a = nextState(EMPTY_STATE, 280_000, 10);   // fires band 275
+  assert.equal(a.fire, 'arm');
+  assert.deepEqual(a.state.firedBands, [275]);
+
+  const b = nextState(a.state, 310_000, 25);       // above 280k * 0.6 -> no reset
+  assert.equal(b.fire, 'ceiling');
+  assert.deepEqual(b.state.firedBands, [275, 300]);
+
+  const c = nextState(b.state, 150_000, 45);       // 150k < 310k * 0.6 -> reset
+  assert.equal(c.state.highWater, 150_000, 'high-water follows the live context down');
+  assert.deepEqual(c.state.firedBands, [275, 300], 'fired bands survive the reset');
+  assert.equal(c.fire, false, 'below ARM, nothing to fire');
+
+  // The ruling this pins: a band fires at most once per session, not once per
+  // compaction epoch. Clearing firedBands here cost 2.88 nudges per firing
+  // session against a 2.0 budget.
+  const d = nextState(c.state, 290_000, 60);       // climbs back into the arm band
+  assert.equal(d.fire, false, 'band 275 already fired; a post-compaction climb does NOT re-fire');
+  assert.deepEqual(d.state.firedBands, [275, 300]);
 });

@@ -61,11 +61,28 @@ export function nextState(prev, ctx, promptIndex) {
     promptCount: prev.promptCount ?? 0, // owned by the caller; preserved, not advanced here
   };
 
-  // A large drop means compaction or tool-result eviction: the old bands no
-  // longer describe the live context, so let them fire again.
+  // A large drop means compaction or tool-result eviction. Reset the high-water
+  // mark so it tracks the live context again, but KEEP firedBands: a band fires
+  // at most once for the lifetime of a session, never once per compaction epoch.
+  //
+  // Clearing firedBands here was the original design, on the reasoning that
+  // post-compaction context is new context and deserves a fresh warning. The
+  // backtest over 74 real sessions falsified it: each epoch granted a fresh
+  // arm+ceiling pair, so repeatedly-compacting sessions earned up to 7 nudges
+  // and the corpus averaged 2.88 per firing session against a budget of 2.0.
+  // Keeping the bands yields 1.88, max 2. The budget makes this forced, not a
+  // preference — the 17 non-compacting firing sessions already consume 31 of
+  // the 50 nudges the budget allows, leaving 19 for the 8 that compact, so
+  // nudging any of them a third time is arithmetically impossible.
+  //
+  // KNOWN COST: the mechanism goes quiet on repeatedly-compacting sessions,
+  // which are the longest and most expensive ones. Accepted because those 8
+  // sessions went on to compact 2-4 more times AFTER their first nudge, so
+  // further nudges would have been noise rather than help. Phase 2's PostCompact
+  // hook is the principled fix — it can re-arm on a real compaction event rather
+  // than inferring one from a token drop.
   if (s.highWater > 0 && ctx < s.highWater * DROP_RATIO) {
     s.highWater = 0;
-    s.firedBands = [];
   }
 
   s.highWater = Math.max(s.highWater, ctx);
