@@ -27,10 +27,17 @@ const GC_DAYS = Number(process.env.CTX_STATE_GC_DAYS || 7);
 const readStdin = () =>
   new Promise((resolve) => {
     let b = '';
+    // The timer alone does not end the wait: an active 'data' listener keeps
+    // stdin referenced, so the event loop — and the process — stays alive
+    // until EOF even after the promise resolves. destroy() is what actually
+    // lets the process exit; without it a parent holding the pipe open blocks
+    // the user's prompt until Claude Code's 60s hook timeout.
+    const done = () => { process.stdin.destroy(); resolve(b); };
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', (d) => (b += d));
-    process.stdin.on('end', () => resolve(b));
-    setTimeout(() => resolve(b), 1500).unref?.();
+    process.stdin.on('end', done);
+    process.stdin.on('error', done); // unhandled 'error' on stdin would otherwise throw past the try/catch
+    setTimeout(done, 1500).unref?.();
   });
 
 function main(raw) {

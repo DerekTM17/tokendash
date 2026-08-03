@@ -77,3 +77,16 @@ test('a missing transcript still fires, without a stale count', () => {
   assert.ok(out);
   assert.doesNotMatch(out.hookSpecificOutput.additionalContext, /stale copies/);
 });
+
+test('promptCount advances on the silent path, not just when firing', () => {
+  // Guards against deleting the silent-path writeState: MIN_PROMPT_GAP counts
+  // prompts elapsed, so if this stopped persisting, 'does not fire twice in
+  // the same band' would still pass while the gap logic silently broke.
+  stamp('gapcount', 150_000); // below ARM: every one of these calls is silent
+  const N = 4;
+  for (let i = 0; i < N; i++) {
+    assert.equal(run({ session_id: 'gapcount', prompt: `p${i}` }), null);
+  }
+  const state = JSON.parse(fs.readFileSync(path.join(tmp, 'gapcount.json'), 'utf8'));
+  assert.equal(state.promptCount, N);
+});
