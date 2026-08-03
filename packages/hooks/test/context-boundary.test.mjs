@@ -32,16 +32,16 @@ test('silent below ARM', () => {
 });
 
 test('fires above ARM with the right envelope', () => {
-  stamp('armed', 250_000);
+  stamp('armed', 280_000);
   const out = run({ session_id: 'armed', prompt: 'now lets do something else' });
   assert.ok(out, 'expected output');
   assert.equal(out.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
   assert.match(out.hookSpecificOutput.additionalContext, /SESSION BOUNDARY CHECK/);
-  assert.match(out.systemMessage, /250k/);
+  assert.match(out.systemMessage, /280k/);
 });
 
 test('does not fire twice in the same band', () => {
-  stamp('once', 250_000);
+  stamp('once', 280_000);
   assert.ok(run({ session_id: 'once', prompt: 'a' }));
   assert.equal(run({ session_id: 'once', prompt: 'b' }), null);
 });
@@ -72,7 +72,7 @@ test('a stale stamp is ignored', () => {
 });
 
 test('a missing transcript still fires, without a stale count', () => {
-  stamp('notrans', 250_000);
+  stamp('notrans', 280_000);
   const out = run({ session_id: 'notrans', prompt: 'x', transcript_path: '/does/not/exist.jsonl' });
   assert.ok(out);
   assert.doesNotMatch(out.hookSpecificOutput.additionalContext, /stale copies/);

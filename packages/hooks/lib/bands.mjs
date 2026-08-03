@@ -2,12 +2,24 @@
 //
 // Bands key off a monotonic HIGH-WATER MARK, not instantaneous context.
 // Measured on real sessions, context is not monotonic — one ran
-// 999k -> 356k -> 948k -> 71k -> 999k. Banding on instantaneous context
-// produced 8.1 nudges per firing session; high-water caps it at one per band.
+// 999k -> 356k -> 948k -> 71k -> 999k, so banding on instantaneous context
+// re-fires on every swing.
+//
+// There are exactly TWO bands: arm and ceiling. An earlier design added a mid
+// band and then one band per 100k above the ceiling, which meant a session
+// peaking near 1M crossed nine bands and earned nine nudges. High-water marking
+// capped that at one nudge per band, but with ~10 bands the cap bought little:
+// the backtest over 74 real sessions measured 7.52 nudges per firing session
+// against a budget of 2.0, and no ARM_TOKENS value fixed it because ARM only
+// governs the first two bands of the ladder.
+//
+// Two terminal bands make the budget structural rather than dependent on
+// MIN_PROMPT_GAP suppression: a session can be nudged at most once for arming
+// and once for hitting the ceiling, no matter how large it grows.
 
 const num = (name, fallback) => Number(process.env[name] || fallback);
 
-export const ARM_TOKENS = num('CTX_ARM_TOKENS', 200_000);
+export const ARM_TOKENS = num('CTX_ARM_TOKENS', 275_000);
 export const CEILING_TOKENS = num('CTX_CEILING_TOKENS', 300_000);
 export const MIN_PROMPT_GAP = num('CTX_MIN_PROMPT_GAP', 10);
 export const DROP_RATIO = num('CTX_DROP_RATIO', 0.6);
@@ -20,12 +32,17 @@ export const EMPTY_STATE = Object.freeze({
   promptCount: 0,
 });
 
-/** Band id for a context size, or null below ARM. */
+/**
+ * Band id for a context size, or null below ARM.
+ *
+ * Two bands only, and the ceiling band is terminal — there is nothing above it,
+ * so growth past CEILING_TOKENS can never earn a third nudge. Ids are the
+ * thresholds in thousands, so they stay plain numbers for state.mjs to persist.
+ */
 export function bandOf(tokens) {
   if (!Number.isFinite(tokens) || tokens < ARM_TOKENS) return null;
-  if (tokens < (ARM_TOKENS + CEILING_TOKENS) / 2) return Math.floor(ARM_TOKENS / 1000);
-  if (tokens < CEILING_TOKENS) return Math.floor(((ARM_TOKENS + CEILING_TOKENS) / 2) / 1000);
-  return Math.floor(tokens / 100_000) * 100;
+  if (tokens < CEILING_TOKENS) return Math.floor(ARM_TOKENS / 1000);
+  return Math.floor(CEILING_TOKENS / 1000);
 }
 
 /**
