@@ -75,16 +75,31 @@ export function bucketCostMix(
   const byKey = new Map();
 
   for (const s of sessions) {
-    if (!s.startedAt || !s.costParts) continue;
-    // Same naive-UTC day convention UsageChart uses, so the two panels agree.
-    const key = bucketKey(s.startedAt.slice(0, 10), granularity);
-    let bucket = byKey.get(key);
-    if (!bucket) {
-      bucket = { key, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, sessionCount: 0 };
-      byKey.set(key, bucket);
+    if (!s.daily?.length) continue;
+    // Bucket each DAY the session was active, not its start date. A session's
+    // totals stamped at `startedAt` smear across whatever bucket it began in —
+    // 95.2% of Claude main-thread calls live in transcripts spanning more than
+    // one calendar day, one of them 19.2 days. Same naive-UTC day convention
+    // UsageChart uses, so the panels agree.
+    const seen = new Set();
+    for (const [day, , , , , , costInput, costOutput, costCacheRead, costCacheWrite] of s.daily) {
+      const key = bucketKey(day, granularity);
+      let bucket = byKey.get(key);
+      if (!bucket) {
+        bucket = { key, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, sessionCount: 0 };
+        byKey.set(key, bucket);
+      }
+      bucket.input += costInput;
+      bucket.output += costOutput;
+      bucket.cacheRead += costCacheRead;
+      bucket.cacheWrite += costCacheWrite;
+      // A session spanning a bucket boundary is one session in each bucket it
+      // touched, but only counted once per bucket.
+      if (!seen.has(key)) {
+        seen.add(key);
+        bucket.sessionCount += 1;
+      }
     }
-    for (const c of COMPONENTS) bucket[c] += s.costParts[c] || 0;
-    bucket.sessionCount += 1;
   }
 
   const keys = [...byKey.keys()].sort();

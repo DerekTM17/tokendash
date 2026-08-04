@@ -19,15 +19,21 @@ vi.mock('recharts', async () => {
   };
 });
 
+/** Single-day session. Buckets come from `daily`, which ingest emits for every
+ *  session, so a fixture without it is not a session the dashboard ever sees. */
+function session(startedAt, costParts) {
+  const day = startedAt.slice(0, 10);
+  return {
+    startedAt,
+    costParts,
+    daily: [[day, 1, 0, 0, 0, 0,
+      costParts.input, costParts.output, costParts.cacheRead, costParts.cacheWrite]],
+  };
+}
+
 const sessions = [
-  {
-    startedAt: '2026-07-19T10:00:00Z',
-    costParts: { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 },
-  },
-  {
-    startedAt: '2026-07-26T10:00:00Z',
-    costParts: { input: 1, output: 10, cacheRead: 70, cacheWrite: 19 },
-  },
+  session('2026-07-19T10:00:00Z', { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 }),
+  session('2026-07-26T10:00:00Z', { input: 1, output: 10, cacheRead: 70, cacheWrite: 19 }),
 ];
 
 describe('CostMixTrend', () => {
@@ -74,9 +80,9 @@ describe('CostMixTrend', () => {
     // lone week has no neighbour to form a line segment with, so only it would
     // otherwise render as an invisible zero-area path.
     const gapped = [
-      { startedAt: '2026-06-07T10:00:00Z', costParts: { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 } },
-      { startedAt: '2026-07-19T10:00:00Z', costParts: { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 } },
-      { startedAt: '2026-07-26T10:00:00Z', costParts: { input: 1, output: 10, cacheRead: 70, cacheWrite: 19 } },
+      session('2026-06-07T10:00:00Z', { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 }),
+      session('2026-07-19T10:00:00Z', { input: 1, output: 5, cacheRead: 80, cacheWrite: 14 }),
+      session('2026-07-26T10:00:00Z', { input: 1, output: 10, cacheRead: 70, cacheWrite: 19 }),
     ];
     const { container } = render(<CostMixTrend sessions={gapped} />);
     // One dot per stacked Area, for the isolated bucket only.

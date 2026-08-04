@@ -1,12 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { bucketCostMix } from '../src/lib/costMix';
 
-/** Build a session with a cost split, defaulting the parts we don't care about. */
+/** Build a single-day session with a cost split, defaulting the parts we don't
+ *  care about. Buckets are built from `daily` (ingest emits it for every
+ *  session), so the helper mirrors what a one-day session really looks like. */
 function session(startedAt, parts) {
+  const costParts = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, ...parts };
   return {
     startedAt,
-    costParts: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, ...parts },
+    costParts,
+    daily: [dayRow(startedAt.slice(0, 10), costParts)],
   };
+}
+
+/** One `daily` row: [day, calls, input, output, cacheRead, cacheWrite,
+ *  costInput, costOutput, costCacheRead, costCacheWrite]. Token columns stay 0
+ *  here — this module only reads the day and the four cost columns. */
+function dayRow(day, parts, calls = 1) {
+  return [day, calls, 0, 0, 0, 0, parts.input, parts.output, parts.cacheRead, parts.cacheWrite];
 }
 
 describe('bucketCostMix', () => {
@@ -14,12 +25,41 @@ describe('bucketCostMix', () => {
     expect(bucketCostMix([], 'week', '2026-07-31')).toEqual([]);
   });
 
-  it('skips sessions missing startedAt or costParts', () => {
+  it('skips sessions with no daily rows', () => {
     const sessions = [
       { startedAt: null, costParts: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0 } },
-      { startedAt: '2026-07-26T10:00:00Z', costParts: null },
+      { startedAt: '2026-07-26T10:00:00Z', costParts: null, daily: [] },
+      { startedAt: '2026-07-26T10:00:00Z', costParts: { input: 1 } },
     ];
     expect(bucketCostMix(sessions, 'week', '2026-07-31')).toEqual([]);
+  });
+
+  it('spreads a multi-day session across the buckets it actually spans', () => {
+    // The defect the per-day rewrite exists to fix. Stamped at startedAt, all
+    // $300 would land in the week of the 19th and the following week would read
+    // as a gap — which is how a long session made a quiet week look busy and
+    // vice versa.
+    const parts = { input: 0, output: 0, cacheRead: 100, cacheWrite: 0 };
+    const spanning = {
+      startedAt: '2026-07-24T10:00:00Z',
+      costParts: { input: 0, output: 0, cacheRead: 300, cacheWrite: 0 },
+      daily: [
+        dayRow('2026-07-24', parts),
+        dayRow('2026-07-27', parts),
+        dayRow('2026-07-30', parts),
+      ],
+    };
+
+    const weeks = bucketCostMix([spanning], 'week', '2026-07-31');
+
+    expect(weeks).toHaveLength(2);
+    expect(weeks[0].key).toBe('2026-07-19');
+    expect(weeks[0].cacheRead).toBeCloseTo(100, 5);
+    expect(weeks[1].key).toBe('2026-07-26');
+    expect(weeks[1].cacheRead).toBeCloseTo(200, 5);
+    // One session, but it genuinely happened in both weeks.
+    expect(weeks[0].sessionCount).toBe(1);
+    expect(weeks[1].sessionCount).toBe(1);
   });
 
   it('weights share by dollars, not by session count', () => {

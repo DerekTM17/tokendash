@@ -205,10 +205,15 @@ Two honesty affordances the review demanded:
 
 `bucketCostMix` moves from `startedAt` to `daily`, summing the four per-day cost
 components instead of the session's `costParts`. The public shape of its output
-is unchanged, so `CostMixTrend.jsx` needs no edit and its existing tests remain
-valid as written. The defect is milder there than here — shares degrade more
-gracefully than a trend line — but it is the same defect and it is now cheap to
-fix.
+is unchanged, so `CostMixTrend.jsx` itself needs no edit. Its **fixtures do**:
+they build sessions from `startedAt` + `costParts` with no `daily`, which is no
+longer a session the dashboard ever sees, so they are rebuilt around a one-day
+`daily` row. A compatibility fallback to `startedAt` was considered and rejected
+— it would be dead code in production and would mask exactly the regression
+(missing `daily`) that the uniform-field decision exists to make loud.
+
+The defect is milder in Phase A than here — shares degrade more gracefully than a
+trend line — but it is the same defect and it is now cheap to fix.
 
 ## Testing
 
