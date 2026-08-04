@@ -8,6 +8,10 @@ Curated, not exhaustive — `git log` has every commit.
 
 ## 2026-08-03
 
+### Per API call panel — context and cost per call, on per-day attribution
+
+**Why:** Phase A could say cache share was 88.9% but not whether that was context discipline improving; delegating more raises cache-write share, so a good habit and a bad one looked alike. This measures the driver: context per API call. Building it surfaced a defect that also affected Phase A — bucketing a session's totals at startedAt, when 95.2% of Claude main-thread calls live in transcripts spanning more than one calendar day (max 19.2 days). Parsers now emit per-day slices and both panels bucket from those. The correction halves the apparent improvement: Claude main context per call is 320k then 191k for the last two weeks, not the 209k/117k the startedAt version claimed.
+
 ### Session boundary detector — design and Phase 1 plan
 
 **Why:** Long sessions are the dominant cost: 82.5% of input spend occurs above 300k context, and half of all sessions peak above 160k. session-checkpoint already writes good handoffs but must be invoked deliberately, so it fires too rarely. This specs the missing trigger — a UserPromptSubmit hook that reads context from the statusline stamp, applies high-water band logic, and asks the model to judge whether the incoming prompt starts a new task. Thresholds (ARM 200k, CEILING 300k) are derived from break-even against a measured 35.6k session floor, not chosen. Design only; no implementation code yet.
