@@ -16,11 +16,26 @@
 // Two terminal bands make the budget structural rather than dependent on
 // MIN_PROMPT_GAP suppression: a session can be nudged at most once for arming
 // and once for hitting the ceiling, no matter how large it grows.
+//
+// ARM and CEILING must stay well separated. At ARM >= CEILING the arm band
+// collapses (bandOf only ever returns the ceiling band), so the soft "judge
+// whether the topic changed" branch in nextState/directive.mjs never runs and
+// every nudge becomes the unconditional ceiling directive — the entire point
+// of having two bands is lost.
+//
+// 2026-08: retuned from 275k/300k to 325k/450k for gate headroom, not because
+// the break-even arithmetic changed. The backtest gate reads a live, growing
+// corpus (~/.claude/projects/), so a firing rate measured against today's
+// session mix drifts as more sessions accumulate. 275k/300k passed at 33.8%
+// when chosen and had drifted to 36.0% (target <=35%) within hours, and
+// values just below the old 300k ceiling passed with only ~0.3pp of margin.
+// 325k/450k measured 28.0% firing with ~7pp of headroom, and widens the arm
+// band from 25k to 125k so the soft-judgment branch has room to matter.
 
 import { numEnv } from './env.mjs';
 
-export const ARM_TOKENS = numEnv('CTX_ARM_TOKENS', 275_000);
-export const CEILING_TOKENS = numEnv('CTX_CEILING_TOKENS', 300_000);
+export const ARM_TOKENS = numEnv('CTX_ARM_TOKENS', 325_000);
+export const CEILING_TOKENS = numEnv('CTX_CEILING_TOKENS', 450_000);
 export const MIN_PROMPT_GAP = numEnv('CTX_MIN_PROMPT_GAP', 10);
 export const DROP_RATIO = numEnv('CTX_DROP_RATIO', 0.6);
 
