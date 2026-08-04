@@ -17,18 +17,22 @@
 // MIN_PROMPT_GAP suppression: a session can be nudged at most once for arming
 // and once for hitting the ceiling, no matter how large it grows.
 
-const num = (name, fallback) => Number(process.env[name] || fallback);
+import { numEnv } from './env.mjs';
 
-export const ARM_TOKENS = num('CTX_ARM_TOKENS', 275_000);
-export const CEILING_TOKENS = num('CTX_CEILING_TOKENS', 300_000);
-export const MIN_PROMPT_GAP = num('CTX_MIN_PROMPT_GAP', 10);
-export const DROP_RATIO = num('CTX_DROP_RATIO', 0.6);
+export const ARM_TOKENS = numEnv('CTX_ARM_TOKENS', 275_000);
+export const CEILING_TOKENS = numEnv('CTX_CEILING_TOKENS', 300_000);
+export const MIN_PROMPT_GAP = numEnv('CTX_MIN_PROMPT_GAP', 10);
+export const DROP_RATIO = numEnv('CTX_DROP_RATIO', 0.6);
 
 export const EMPTY_STATE = Object.freeze({
   highWater: 0,
-  firedBands: [],
+  // Frozen too: readState returns this exact singleton on every miss, and a
+  // caller pushing directly into one of these arrays (rather than spreading
+  // first, as every consumer does today) would silently poison it for every
+  // subsequent miss across the process's lifetime.
+  firedBands: Object.freeze([]),
   lastFiredPrompt: -Infinity,
-  verdicts: [],
+  verdicts: Object.freeze([]),
   promptCount: 0,
 });
 

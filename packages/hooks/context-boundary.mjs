@@ -15,14 +15,16 @@
 //   * Exits 0 on every path. A hook that breaks a session is worse than none.
 //
 // Tunables (env): CTX_ARM_TOKENS, CTX_CEILING_TOKENS, CTX_MIN_PROMPT_GAP,
-//   CTX_STALE_GAP_ENTRIES, CTX_FLOOR_TOKENS, CTX_MAX_AGE_MS, CTX_STATE_DIR.
+//   CTX_STALE_GAP_ENTRIES, CTX_FLOOR_TOKENS, CTX_MAX_AGE_MS, CTX_STATE_DIR,
+//   CTX_STATE_GC_DAYS, CTX_DROP_RATIO.
 
 import { nextState } from './lib/bands.mjs';
 import { readCtx, readState, writeState, gcState } from './lib/state.mjs';
 import { countStaleReads } from './lib/stale-reads.mjs';
 import { buildDirective } from './lib/directive.mjs';
+import { numEnv } from './lib/env.mjs';
 
-const GC_DAYS = Number(process.env.CTX_STATE_GC_DAYS || 7);
+const GC_DAYS = numEnv('CTX_STATE_GC_DAYS', 7);
 
 const readStdin = () =>
   new Promise((resolve) => {

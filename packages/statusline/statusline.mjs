@@ -90,7 +90,13 @@ function main(raw) {
   // Claude Code hands us an authoritative context size, and it runs every turn.
   // The alternative — parsing transcript_path — means reading up to 35MB of an
   // internal format the docs warn can change on any release.
-  if (d.session_id) {
+  //
+  // Only stamp when there is real usage data. `used` defaults to 0 above so
+  // the *rendering* path always has a number to draw, but stamping that 0
+  // would tell the boundary detector "this session has 0 tokens of context" —
+  // silently disarming it — whenever context_window is absent. No usage data
+  // means stay silent, not default to 0.
+  if (d.session_id && Number.isFinite(cw.total_input_tokens)) {
     writeCtx(d.session_id, {
       tokens: used,
       pct: Math.round(pct),

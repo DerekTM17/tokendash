@@ -42,6 +42,15 @@ test('statusline still renders when session_id is absent', () => {
   assert.ok(out.includes('Opus'), 'rendering is unaffected by a missing session_id');
 });
 
+test('statusline does not stamp when context_window is absent', () => {
+  const out = run({
+    session_id: 'stamp-no-ctx',
+    model: { id: 'claude-opus-5', display_name: 'Opus' },
+  });
+  assert.equal(fs.existsSync(path.join(tmp, 'stamp-no-ctx.ctx')), false, 'no stamp without usage data');
+  assert.ok(out.includes('Opus'), 'rendering still happens without a stamp');
+});
+
 test('malformed statusline input still exits 0', () => {
   const out = execFileSync('node', [statusline], {
     input: 'not json', encoding: 'utf8', env: { ...process.env, CTX_STATE_DIR: tmp },

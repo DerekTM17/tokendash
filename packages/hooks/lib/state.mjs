@@ -10,8 +10,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { EMPTY_STATE } from './bands.mjs';
+import { numEnv } from './env.mjs';
 
-const CTX_MAX_AGE_MS = Number(process.env.CTX_MAX_AGE_MS || 600_000);
+const CTX_MAX_AGE_MS = numEnv('CTX_MAX_AGE_MS', 600_000);
 
 export function stateDir() {
   return process.env.CTX_STATE_DIR || path.join(os.homedir(), '.claude', '.context-boundary');
@@ -63,6 +64,11 @@ export function readState(sessionId) {
     return {
       highWater: Number(d.highWater) || 0,
       firedBands: Array.isArray(d.firedBands) ? d.firedBands : [],
+      // Deliberately asymmetric with its siblings: -Infinity serializes to
+      // JSON null, and `Number(null) || 0` would coerce a never-fired session
+      // back to 0 on read — which would then gap-suppress the very first band
+      // crossing (promptIndex - 0 < MIN_PROMPT_GAP for early prompts). Do not
+      // "harmonize" this to `Number(x) || 0` to match highWater/promptCount.
       lastFiredPrompt: Number.isFinite(d.lastFiredPrompt) ? d.lastFiredPrompt : -Infinity,
       verdicts: Array.isArray(d.verdicts) ? d.verdicts : [],
       // Counts every prompt, not just fired ones — MIN_PROMPT_GAP is measured

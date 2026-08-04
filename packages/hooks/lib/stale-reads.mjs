@@ -12,13 +12,14 @@
 // deliberately NOT in the hot path.
 
 import fs from 'node:fs';
+import { numEnv } from './env.mjs';
 
 // Why the gap threshold exists: measured across all main transcripts, 633 of 1,170
 // reads are followed by an edit to the same path, but the median gap is 2 entries
 // and 51.7% are <=2 — that's mandatory read-before-edit (Edit refuses to run without
 // a prior Read), not waste. Only a gap of 50+ entries means the content actually went
 // stale before it was acted on.
-const STALE_GAP_ENTRIES = Number(process.env.CTX_STALE_GAP_ENTRIES || 50);
+const STALE_GAP_ENTRIES = numEnv('CTX_STALE_GAP_ENTRIES', 50);
 const EDITORS = new Set(['Edit', 'Write', 'NotebookEdit']);
 
 /**

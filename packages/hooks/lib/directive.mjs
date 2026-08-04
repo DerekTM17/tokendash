@@ -5,7 +5,12 @@
 // re-read at cache-read price on every subsequent call for the rest of the
 // session. It is additive to the problem it describes, so it must earn its size.
 
-const FLOOR_TOKENS = Number(process.env.CTX_FLOOR_TOKENS || 35_620);
+import { numEnv } from './env.mjs';
+
+const FLOOR_TOKENS = numEnv('CTX_FLOOR_TOKENS', 35_620);
+// Estimate, not a measurement: the output tokens a handoff write (via
+// session-checkpoint) is expected to spend. Feeds costFigures()'s boundaryCost,
+// one of the two inputs behind every break-even figure quoted to the user.
 const HANDOFF_OUTPUT_TOKENS = 1_200;
 const W_WRITE = 1.25;
 const W_READ = 0.1;
