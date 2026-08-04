@@ -168,3 +168,116 @@ git log --oneline -3                # expect 4f95362 plan, 1d11718 spec
 npm test                            # expect ingest + dashboard green (hooks suite does not exist yet)
 sed -n '1,60p' docs/superpowers/plans/2026-08-03-session-boundary-detector.md
 ```
+
+#### Handoff — Per API call panel (Phase B), and the per-day attribution fix
+
+**Goal** — Phase A measured a proxy: cache share moves when you delegate more,
+so an improving habit and a quiet week looked alike. Phase B measures the
+driver — context per API call and cost per call.
+
+**Done** (branch `feat/per-call-context`, NOT merged — see the warning below)
+
+Three commits: `68c7b95` spec, `c51c173` ingest, `17183c3` dashboard. New files:
+`packages/ingest/src/daily.js`, `packages/dashboard/src/lib/perCall.js`,
+`packages/dashboard/src/components/PerCallTrend.jsx`, plus tests for each.
+
+The panel: four lines (Claude main, Claude subagent, Codex main, Codex subagent)
+with Context/Cost and Week/Day toggles, mounted at `delay={272}` under
+`CostMixTrend`, consuming `filtered`.
+
+**⚠️ DO NOT MERGE THIS BRANCH AS-IS.** A concurrent session committed its
+`packages/hooks` session-boundary-detector work onto the same branch while this
+was in flight — `6f6df8e` sits between two of my commits, and 12 more hooks
+commits precede them. There is **zero file overlap** (mine touch only
+`docs/superpowers/specs/`, `packages/ingest/`, `packages/dashboard/`), so the
+three commits above cherry-pick cleanly onto `main` if you want this without the
+hooks work. Decide deliberately; don't fast-forward.
+
+**The finding that reshaped the work** — a design review caught that bucketing a
+session's totals at `startedAt` is fatal for a per-call trend: **95.2% of Claude
+main-thread calls live in transcripts spanning more than one calendar day**, max
+span 19.2 days (verified personally, not taken from the subagent). One 3,538-call
+session runs 06-11 → 06-30 and would land entirely in the week of 06-07. So the
+parsers now emit per-day token/call slices and BOTH panels bucket from those.
+`bucketCostMix` was retrofitted — Phase A had the same defect, milder because
+shares degrade more gracefully than a trend line.
+
+**This changed the answer, not just the plumbing.** Claude main context per call:
+
+```
+06-07 389,818 | 06-14 488,537 | 06-21 455,087 | 06-28 369,813 | 07-05 464,853
+07-12 430,490 | 07-19 457,193 | 07-26 320,452 | 08-02 191,152 (partial, 573 calls)
+```
+
+The `startedAt` version claimed 209k then 117k for the last two weeks. The real
+figures are 320k and 191k, and the last is a partial week — **the broken version
+roughly doubled the apparent improvement**. There is a genuine recent decline;
+it is smaller and more provisional than it first looked.
+
+Verified, not assumed:
+- `npm test` → **64 ingest + 48 hooks + 86 dashboard, 0 failures**, run personally.
+- All five `daily` invariants hold across the real 2,564-session corpus (calls,
+  four token columns, four cost columns, non-empty, ascending unique days);
+  worst cost delta $4.8e-9.
+- Codex call count came out at **4,484**, matching the reviewer's independent
+  derivation from Codex's own `last_token_usage` on 4,484 of 4,484 events.
+- Browser-verified at :5199 in all four toggle combinations (real Chromium, not
+  jsdom): 4 lines render, 1 isolated dot weekly / 5 daily, dollar axis and the
+  caveat text swap in Cost mode, no layout jump. Screenshots were taken.
+
+**Two corrections to numbers in the earlier spec** — Codex peaked at **16.3%** of
+weekly spend, not 24.9%, so it has NOT crossed Phase A's 20% revisit trigger; the
+prior week was 1.9%, not 0.6%. Both errors came from Monday-start weeks where
+`costMix.js` weeks on Sunday.
+
+**Decisions** (settled — don't re-litigate)
+
+- **Call-weighted means, never a mean of per-session averages.** Beyond the Phase
+  A cost-weighting argument, this is structurally required: it is the only form
+  invariant to the `__model` row splitting, since numerator and denominator both
+  partition exactly across split rows.
+- **`daily` is emitted for EVERY session**, including single-day ones where it is
+  redundant. Measured at +9% of payload. A field present for some rows and absent
+  for others reads as zero downstream — how the opencode attribution bug survived
+  months. A `startedAt` fallback in `bucketCostMix` was considered and rejected
+  for the same reason: dead code that would mask a missing-`daily` regression.
+- **Main and subagent stay apart.** Claude main context per call runs ~6x its
+  subagents'. Blended, a week where you delegated more pulls the line down and
+  reads as improvement while main-thread context sat flat.
+- **opencode is counted but not plotted** — 0.1% of spend, four scattered points.
+- **`tokens.json` is now written compact.** Indentation was 60% of its bytes. The
+  file is 1.40MB, DOWN from 1.54MB, despite carrying the new per-day data.
+
+**Gotchas**
+
+- **Still true, and it bit this time: after editing anything in
+  `packages/ingest/src`, run `./scripts/autostart.sh`** or the long-lived watcher
+  keeps running old code and overwrites `tokens.json`.
+- **Codex rollouts contain TWO disagreeing `session_meta` entries in 24 of 68
+  files** — the replay burst carries the parent's meta into the child's. Last-wins
+  (the obvious reading, and how `turn_context.model` is latched) mislabels every
+  one, and since Codex is 61% subagent by cost that inverts the chart. The parser
+  takes the FIRST meta and only once `payload.id` matches the filename uuid
+  (holds in 68/68). There is a fixture for this.
+- **Not every `token_count` event is a call.** Only those that advance the
+  cumulative counter; 120 local events re-report without advancing.
+- **10 of 103,174 Claude usage entries report a 1h cache subset LARGER than the
+  cache_creation total it is a subset of.** Now clamped per call in the parser
+  rather than per session in `pricing.js` — the coarser clamp let one over-report
+  hide under other calls' headroom, and billed the 2x tier for tokens never
+  written at it.
+- **jsdom reports zero size, so recharts renders no children and chart assertions
+  pass vacuously.** `PerCallTrend.test.jsx` mocks `ResponsiveContainer` to
+  800x300, as `CostMixTrend.test.jsx` does. `UsageChart.test.jsx` still does not —
+  logged in BACKLOG.
+- `npm run lint` is broken by a pre-existing ESLint v9 config migration issue
+  (`.eslintrc` vs `eslint.config.js`). Not caused by this work.
+
+**Resume**
+
+```sh
+cd ~/opencode/projects/token-dashboard
+npm test                            # expect 64 ingest + 48 hooks + 86 dashboard, 0 failures
+node --input-type=module -e "import {bucketPerCall} from './packages/dashboard/src/lib/perCall.js';import fs from 'node:fs';console.log(bucketPerCall(JSON.parse(fs.readFileSync('./packages/dashboard/public/tokens.json','utf8')).sessions,'week').slice(-3))"
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5199/   # expect 200
+```
