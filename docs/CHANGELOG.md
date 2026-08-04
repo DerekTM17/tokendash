@@ -6,11 +6,41 @@ also include **Tradeoffs / Alternatives considered**.
 
 Curated, not exhaustive — `git log` has every commit.
 
+## 2026-08-04
+
+### Session boundary detector — Phase 1 shipped, thresholds retuned to 325k/450k
+
+**Why:** Brings the design spec and changelog into line with what actually shipped
+(implementation diverged from the 2026-08-03 design in four ways during execution).
+**Thresholds moved to ARM 325k / CEILING 450k**, not the 200k/300k below — the
+break-even arithmetic didn't change, but the backtest gate measures a live, growing
+corpus and 200k fired on 41.9% of real sessions against a <=35% budget; 275k/300k
+passed at 33.8% and drifted to 36.0% within hours, so 325k/450k was chosen for ~7pp of
+headroom. **The band ladder is gone** — exactly two terminal bands (arm, ceiling)
+instead of ARM/250k/CEILING/+100k-forever, which cut nudges per firing session from
+7.52 to 2.88; a session peaking near 1M no longer earns nine nudges. **Compaction no
+longer clears fired bands** — a context drop resets the high-water mark but keeps
+`firedBands`, taking nudges per firing session from 2.88 to 1.86 at the cost of going
+quiet on repeatedly-compacting sessions (7 of 8 in the measured corpus get no nudge
+after their first pair); Phase 2's deferred `PostCompact` hook is the principled fix.
+**Stale-read counting was rewritten** to pair each read with the next edit to that
+path (one count per path) instead of only the earliest read/earliest edit, which both
+under- and over-counted files touched more than once. Final backtest on 75 main
+sessions: 21/75 firing (28.0%, target <=35%), 1.86 nudges/firing session (target
+<=2.0), 18/18 sessions with peak >=500k fire, 0/33 below 100k fire, gate exit 0.
+**Known gap, not shipped:** the design's "continue verdicts don't consume the band"
+mitigation for the highest-severity risk (the model rationalizing "continue"
+indefinitely) was never built — there is no return channel from the model back into
+hook state, so the band is consumed unconditionally at fire time and `state.verdicts[]`
+is a misleadingly-named fire log that nothing reads back. Below `CEILING_TOKENS` that
+risk is unmitigated. Full detail in
+`docs/superpowers/specs/2026-08-03-session-boundary-detector-design.md`.
+
 ## 2026-08-03
 
 ### Session boundary detector — design and Phase 1 plan
 
-**Why:** Long sessions are the dominant cost: 82.5% of input spend occurs above 300k context, and half of all sessions peak above 160k. session-checkpoint already writes good handoffs but must be invoked deliberately, so it fires too rarely. This specs the missing trigger — a UserPromptSubmit hook that reads context from the statusline stamp, applies high-water band logic, and asks the model to judge whether the incoming prompt starts a new task. Thresholds (ARM 200k, CEILING 300k) are derived from break-even against a measured 35.6k session floor, not chosen. Design only; no implementation code yet.
+**Why:** Long sessions are the dominant cost: 82.5% of input spend occurs above 300k context, and half of all sessions peak above 160k. session-checkpoint already writes good handoffs but must be invoked deliberately, so it fires too rarely. This specs the missing trigger — a UserPromptSubmit hook that reads context from the statusline stamp, applies high-water band logic, and asks the model to judge whether the incoming prompt starts a new task. Thresholds (ARM 200k, CEILING 300k) were the design-time estimate, derived from break-even against a measured 35.6k session floor — the implementation retuned them; see the 2026-08-04 entry above for the shipped values and why they moved. Design only at time of writing; no implementation code yet.
 
 ### Cost mix over time panel
 

@@ -1,6 +1,6 @@
 # Session boundary detector — design
 
-**Status:** approved design, not yet implemented
+**Status:** implemented (Phase 1 shipped 2026-08-04; Phases 2–3 not started)
 **Date:** 2026-08-03
 **Repo:** token-dashboard (`packages/hooks/`)
 
@@ -67,6 +67,19 @@ Cutting at context `C` saves `(C - floor) x 0.1` units per turn avoided.
 
 Thresholds are derived from this table, not chosen for roundness.
 
+**Why the shipped thresholds are 325k/450k, not the 200k/300k this table points at.**
+The arithmetic above did not change and remains valid — it justifies cutting somewhere
+in the 200k–500k range, not one specific pair of numbers. The specific ARM/CEILING pair
+came from the backtest gate (Testing, below), run against a live, growing corpus of real
+sessions, and that gate pushed the operating point higher than break-even alone
+suggests: 200k fired on **41.9%** of real sessions against a <=35% budget. An
+intermediate 275k/300k passed at 33.8% when chosen, but the margin was thin and it had
+drifted to **36.0%** within hours of ordinary use, no threshold change involved — see
+"Gate reproducibility" under Testing. The shipped values, **ARM 325k / CEILING 450k**,
+measure 28.0% firing with ~7pp of headroom and widen the arm band from 25k wide to 125k
+wide, giving the model's topic-continuity judgment (Component 3) room to matter before
+the ceiling makes it moot.
+
 ## Why this is not redundant
 
 **Auto-compact does not cover the range where the money goes.** On 1M-context models
@@ -125,7 +138,9 @@ Claude Code  <--(additionalContext: numbers + directive)-----------------  |
    |
    | model judges: does this prompt continue the thread?
    |
-   +-- continues --> stay silent, answer normally, do NOT consume the band
+   +-- continues --> stay silent, answer normally
+   |                  (band already consumed when the hook fired — see
+   |                  "Band consumption did not ship" under Component 3)
    |
    +-- new task --> write handoff (session-checkpoint)
                     write restart prompt to .restart-prompt
@@ -176,20 +191,61 @@ existing `read-context-cost.mjs`: reads hook JSON on stdin, writes JSON on stdou
 1. Read `<session_id>.ctx`. Missing or older than 10 minutes → exit 0 silent.
 2. `ctx < ARM` → exit 0 silent. This is the common path and must be fast.
 3. Load band state `<session_id>.json`: `{ highWater, firedBands[], lastFiredPrompt, verdicts[] }`.
-4. If `ctx < highWater * 0.6`, a compaction or eviction occurred → clear `firedBands`,
-   reset `highWater`. (Also cleared by Component 4.)
+4. If `ctx < highWater * DROP_RATIO` (0.6), a compaction or eviction occurred → reset
+   `highWater` to 0 so it tracks live context again, but **keep** `firedBands` — a band
+   fires at most once for the lifetime of a session, never once per compaction epoch.
+   See "Compaction does not re-arm" below.
 5. `highWater = max(highWater, ctx)`. Compute band from **`highWater`**, not from `ctx`.
 6. Band already in `firedBands`, or fewer than 10 prompts since `lastFiredPrompt` → exit 0.
-7. Count **stale reads** by scanning the transcript: paths read, then edited **>= 50
-   entries later**. Skip `isSidechain` entries.
+7. Count **stale reads** by scanning the transcript in order, pairing each `Read` with
+   the **next** edit to that path — a re-read refreshes the outstanding read, and an
+   edit consumes it either way — and counting a path once if that gap is **>= 50
+   entries**. Skip `isSidechain` entries. (Rewritten from the original design, which
+   paired only the earliest read with the earliest edit per path; that both
+   under-counted and over-counted any file touched more than once.)
 8. Emit `systemMessage` + `hookSpecificOutput.additionalContext`.
 
-**Bands:** ARM (200k), 250k, CEILING (300k), then every +100k.
+**Bands:** exactly two, keyed off the high-water mark. Below `ARM_TOKENS` nothing
+fires. From `ARM_TOKENS` up to (not including) `CEILING_TOKENS` is the arm band.
+`CEILING_TOKENS` and above is one terminal ceiling band — there is nothing above it, so
+growth past the ceiling can never earn a third nudge. Shipped values: **ARM 325k,
+CEILING 450k**. `ARM` and `CEILING` must stay well separated: at `ARM >= CEILING` the
+arm band collapses (`bandOf` only ever returns the ceiling band), the soft
+"judge whether the topic changed" branch in Component 3 never runs, and every nudge
+becomes the unconditional ceiling directive — the entire point of having two bands is
+lost.
+
+> **Why only two bands.** This section originally specified a mid band and then one band
+> per +100k above the ceiling: ARM (200k), 250k, CEILING (300k), then every +100k. A
+> session peaking near 1M crosses nine such bands. High-water marking (below) caps
+> nudges at one per band per session, but with ~10 bands that cap bought little: the
+> backtest over 74 real sessions measured **7.52 nudges per firing session** against a
+> budget of 2.0, because ARM only governs the first two bands of the ladder — no ARM
+> value fixed it. Cutting to exactly two terminal bands made the budget structural
+> rather than dependent on band count: a session can be nudged at most once for arming
+> and once for hitting the ceiling, no matter how large it grows. Measured: **2.88**
+> nudges per firing session right after the cut, **1.86** after the compaction fix
+> below.
 
 > **Why the high-water mark.** Context is not monotonic — one session measured
-> 999k -> 356k -> 948k -> 71k -> 999k. Simulated against real sessions, banding on
-> instantaneous context produced **8.1 nudges per firing session**. Banding on the
-> high-water mark caps it at one nudge per band per session.
+> 999k -> 356k -> 948k -> 71k -> 999k. Banding on instantaneous context produced an
+> estimated **8.1 nudges per firing session** against the old ~10-band ladder above.
+> Banding on the high-water mark caps it at one nudge per band per session — but that
+> cap barely mattered against ~10 bands (8.1 -> 7.52, above). It only became decisive
+> once the ladder itself was cut to two bands.
+
+> **Compaction does not re-arm.** The original design cleared `firedBands` on a
+> high-water drop, on the reasoning that post-compaction context is new context and
+> deserves a fresh warning. The backtest falsified it: each compaction epoch granted a
+> fresh arm+ceiling pair, so repeatedly-compacting sessions earned up to 7 nudges and the
+> corpus averaged 2.88 nudges per firing session against the 2.0 budget. Keeping
+> `firedBands` through a drop yields 1.86. **Known cost, accepted, not free:** the
+> mechanism goes quiet on repeatedly-compacting sessions — in the measured corpus, 7 of
+> the 8 sessions that compact receive no further nudges after their first arm+ceiling
+> pair. Phase 2's deferred `PostCompact` hook (Component 4) is the intended principled
+> fix: it can re-arm on an exact compaction event instead of inferring one from the
+> `DROP_RATIO` heuristic, which cannot tell real compaction apart from ordinary
+> tool-result eviction.
 
 > **Why the >= 50-entry gap on stale reads.** Measured across all main transcripts: 633
 > of 1,170 reads are followed by an edit to the same path, but the median gap is **2
@@ -202,12 +258,12 @@ existing `read-context-cost.mjs`: reads hook JSON on stdin, writes JSON on stdou
 
 Emitted as `additionalContext`. Text:
 
-> **SESSION BOUNDARY CHECK** — mechanical trigger, not a user request.
+> SESSION BOUNDARY CHECK — mechanical trigger, not a user request.
 >
-> Context is now **{N}k tokens**. Every further turn in this session costs ~**${X}** in
-> cache reads alone; the same work in a fresh session costs ~**${Y}**. A boundary pays
-> for itself in **{B} turns**. **{S} files** in context are stale copies (read, then
-> edited more than 50 turns ago).
+> Context is now **{N}k tokens**. Every further turn costs ~**${X}** in cache reads
+> alone; the same work in a fresh session costs ~**${Y}**. **{S} files** in context are
+> stale copies (read, then edited much later). A boundary pays for itself in **{B}
+> turns**.
 >
 > Before answering, judge silently: does the user's message continue the current thread,
 > or start something new?
@@ -215,27 +271,43 @@ Emitted as `additionalContext`. Text:
 > **If it continues** — say nothing about this. Answer normally.
 >
 > **If it starts something new, or the current task just finished** —
-> 1. Write the handoff first (invoke `session-checkpoint`) and confirm it is on disk.
-> 2. Write the restart prompt to `~/.claude/.context-boundary/<session_id>.restart`.
-> 3. Tell the user in one line why now, with the number, and to `/clear`.
+> 1. Write the handoff FIRST (invoke `session-checkpoint`) and confirm it is on disk.
+> 2. Tell the user in one line why now, with the number, and print the restart prompt.
 >
-> **Never do both.** Do not write a handoff and then also answer the new question in this
-> session — that defeats the purpose.
+> Never do both: do not write a handoff and then also answer the new question in this
+> session.
 
-Above CEILING the first clause is replaced with: *raise the boundary regardless of topic
-continuity.*
+Above CEILING the first clause is replaced with: *raise the boundary now, regardless of
+topic continuity.*
+
+**Phase 1 gap versus the architecture diagram above.** Step 2 says "print the restart
+prompt," not "write it to disk and tell the user to `/clear`" — Component 4 (the file
+write plus the `SessionStart` auto-resume) is Phase 2 and has not shipped, so there is
+nothing yet for a written `.restart` file to feed into. When Phase 2 lands, step 2 is
+expected to change to match the diagram.
 
 **Two failure modes this text is written against.** (a) The model helpfully checkpoints
 *and* answers, leaving the user with a handoff plus 40 more turns on the old context —
 hence the explicit prohibition. (b) The model rationalizes "this refines what we just
 did" indefinitely, because continuing is helpful and invisible while stopping is
-disruptive and visible. Mitigations: the ceiling removes the judgment call entirely, and
-a "continue" verdict does **not** consume the band (see below).
+disruptive and visible. The only mitigation that shipped for (b) is the non-semantic
+ceiling: past `CEILING_TOKENS` the directive drops the topic-continuity judgment
+entirely. Below the ceiling, (b) is **unmitigated** — see "Band consumption did not
+ship," next.
 
-**Band consumption rule.** A band is marked fired only when a boundary was actually
-offered. A "continue" verdict appends to `verdicts[]` but leaves the band unfired, so the
-next prompt re-evaluates. Without this the model can silently disable the mechanism band
-by band with no record.
+**Band consumption did not ship.** The design called for marking a band fired only when
+a boundary was actually offered: a "continue" verdict would leave the band unfired so the
+next prompt re-evaluates, closing off the silent-rationalization failure mode. That
+requires a return channel from the model's judgment back into hook state, and none
+exists — `UserPromptSubmit` decides whether to fire *before* the model ever sees the
+prompt, so there is nothing for the model to report back to. What shipped
+(`context-boundary.mjs`) consumes the band unconditionally at fire time, regardless of
+what the model goes on to decide, then pushes a record to `state.verdicts[]`. That field
+name is misleading: the record (`{ts, tokens, mode, prompt}`) is identical in shape
+whether the model continues or checkpoints — it is a fire log, not a verdict — and
+nothing in the codebase reads `verdicts[]` back. The high-severity risk this rule was
+meant to close (Risks, below) is therefore live: below the ceiling, a model that
+rationalizes "continue" indefinitely faces no consequence.
 
 ### Component 4 — the restart (new: `packages/hooks/session-restart.mjs`)
 
@@ -309,7 +381,17 @@ Acceptance criteria:
 | sessions with peak < 100k that fire | 0 |
 
 If the thresholds cannot hit this on historical data, they are wrong and get tuned before
-this ever runs live.
+this ever runs live. Results at the shipped thresholds are in Open questions #1.
+
+> **Gate reproducibility.** The backtest walks the live `~/.claude/projects/`
+> directory, which both gains files (new sessions) and grows existing transcripts in
+> place as sessions continue. The gate is therefore **not reproducible over time** — at
+> 275k/300k it passed at 33.8% when chosen and had drifted to 36.0% (target <=35%)
+> within a single day of ordinary use, with no threshold change involved. Pinning or
+> snapshotting the corpus before comparing runs is the durable fix and has not been
+> done. If a future run fails this gate, the correct response is to investigate the
+> corpus — what changed, is the `agent-*`/`journal` population filter still correct, did
+> a handful of unusually large sessions land — **not** to loosen the 35% target.
 
 **Live validation.** After two weeks, compare median peak context per session against the
 72-session baseline (p50 160.4k, p75 529.0k). The mechanism works if p75 falls
@@ -320,9 +402,9 @@ before/after instrumentation.
 
 | phase | scope | gate |
 |---|---|---|
-| **1** | Components 1–3: statusline stamp, detector, directive. Nudge only — no auto-restart. | Backtest criteria pass |
-| **2** | Component 4: `initialUserMessage` auto-restart + `PostCompact` reset | Phase 1 nudges land at sensible moments for 2 weeks |
-| **3** | Floor reduction (below) | Phases 1–2 stable |
+| **1** | Components 1–3: statusline stamp, detector, directive. Nudge only — no auto-restart. | Backtest criteria pass — **met, 2026-08-04** (Open questions #1) |
+| **2** | Component 4: `initialUserMessage` auto-restart + `PostCompact` reset | Phase 1 nudges land at sensible moments for 2 weeks — **not started** |
+| **3** | Floor reduction (below) | Phases 1–2 stable — **not started** |
 
 ### Phase 3 — floor reduction
 
@@ -343,16 +425,29 @@ before acting — the decomposition above is partly inferred, not measured.
 
 | risk | severity | mitigation |
 |---|---|---|
-| Model rationalizes "continue" indefinitely | high | non-semantic ceiling; band not consumed on continue; verdicts logged for audit |
+| Model rationalizes "continue" indefinitely | high | non-semantic ceiling only, and only above `CEILING_TOKENS`; the band-non-consumption / verdict-audit mitigation described here was **never built** ("Band consumption did not ship," Component 3) — below the ceiling this risk is **unmitigated** |
 | Handoff loses task-critical state | high | write and verify handoff *before* proposing; every comparable tool surveyed has open issues of exactly this kind |
-| Nudge fires mid-task and breaks flow | medium | 200k arm is above p50 peak; semantic gate; 10-prompt gap |
+| Nudge fires mid-task and breaks flow | medium | 325k arm is well above the measured p50 peak (160.4k); semantic gate; 10-prompt gap |
 | Statusline stamp goes stale or absent | medium | 10-minute staleness bound, silent on miss |
 | Hook payload shape changes across versions | medium | consume only `session_id`, `cwd`, `prompt`; no transcript-format parsing in the hot path |
 | `additionalContext` is itself permanently resident | low | ~200 tokens, capped at one per band; the alternative is not measuring at all |
 
 ## Open questions
 
-1. Does the 200k arm survive the backtest, or does it need to move to 250k?
+1. ~~Does the 200k arm survive the backtest, or does it need to move to 250k?~~
+   Resolved, and the answer was more work than a single move. 200k did not survive —
+   against the live corpus it fired on 41.9% of sessions (target <=35%). An intermediate
+   275k/300k passed at 33.8% but drifted to 36.0% within hours (see "Gate
+   reproducibility" under Testing). Shipped at **ARM 325k / CEILING 450k**, backtest on
+   75 main sessions:
+
+   | criterion | target | measured |
+   |---|---|---|
+   | sessions firing | <= 35% | 21/75 (28.0%) |
+   | nudges per firing session | <= 2.0 | 1.86 |
+   | peak >= 500k that fire | 100% | 18/18 |
+   | peak < 100k that fire | 0 | 0/33 |
+   | gate exit code | 0 | 0 |
 2. Should a quiet statusline marker show when the detector armed but stayed silent? It
    would give visibility into the mechanism's real behaviour at the cost of some noise.
 3. Is the 10-prompt gap right, or should it be time-based?
