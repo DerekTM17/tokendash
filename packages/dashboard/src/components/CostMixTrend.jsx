@@ -4,9 +4,11 @@ import {
   CartesianGrid, ResponsiveContainer,
 } from 'recharts';
 import { bucketCostMix } from '../lib/costMix';
+import { dataCoverage, trimToCoverage } from '../lib/coverage';
 import { formatCost, formatAxisDollars } from '../lib/format';
 import { PARTS } from '../lib/costParts';
 import ToggleButton from './ToggleButton';
+import CoverageNote from './CoverageNote';
 
 function bucketLabel(key, granularity) {
   const date = new Date(key + 'T00:00:00Z').toLocaleDateString('en-US', {
@@ -98,7 +100,11 @@ export default function CostMixTrend({ sessions, delay = 0 }) {
   const [granularity, setGranularity] = useState('week');
   const [mode, setMode] = useState('share');
 
-  const data = useMemo(() => bucketCostMix(sessions, granularity), [sessions, granularity]);
+  const coverage = useMemo(() => dataCoverage(sessions), [sessions]);
+  const data = useMemo(
+    () => trimToCoverage(bucketCostMix(sessions, granularity), coverage, granularity),
+    [sessions, granularity, coverage],
+  );
   const maxTotal = useMemo(
     () => data.reduce((max, b) => Math.max(max, b.total || 0), 0),
     [data],
@@ -199,6 +205,7 @@ export default function CostMixTrend({ sessions, delay = 0 }) {
             </ComposedChart>
           </ResponsiveContainer>
         )}
+        {data.length > 0 && <CoverageNote coverage={coverage} />}
       </div>
     </div>
   );

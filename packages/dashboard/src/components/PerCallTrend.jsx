@@ -4,8 +4,10 @@ import {
   CartesianGrid, ResponsiveContainer,
 } from 'recharts';
 import { bucketPerCall, toChartRows, SERIES } from '../lib/perCall';
+import { dataCoverage, trimToCoverage } from '../lib/coverage';
 import { formatTokens, formatAxisDollars } from '../lib/format';
 import ToggleButton from './ToggleButton';
+import CoverageNote from './CoverageNote';
 
 // One hue per tool, weaker for subagent, so the eye reads tool first and kind
 // second. Claude keeps the cyan it carries elsewhere on the page; Codex takes
@@ -88,7 +90,11 @@ export default function PerCallTrend({ sessions, delay = 0 }) {
   const [granularity, setGranularity] = useState('week');
   const [metric, setMetric] = useState('context');
 
-  const buckets = useMemo(() => bucketPerCall(sessions, granularity), [sessions, granularity]);
+  const coverage = useMemo(() => dataCoverage(sessions), [sessions]);
+  const buckets = useMemo(
+    () => trimToCoverage(bucketPerCall(sessions, granularity), coverage, granularity),
+    [sessions, granularity, coverage],
+  );
   const data = useMemo(() => toChartRows(buckets, metric), [buckets, metric]);
 
   const context = metric === 'context';
@@ -164,6 +170,7 @@ export default function PerCallTrend({ sessions, delay = 0 }) {
                 ? 'Input + cache read + cache write per call, weighted by calls. Main and subagent are kept apart: delegating more lowers a blended average without context discipline changing.'
                 : 'Cost per call is context per call times the blended rate of whichever models ran, and those rates span about 4x. A fall here can mean leaner context or a cheaper model — read it alongside Context.'}
             </div>
+            <CoverageNote coverage={coverage} />
           </>
         )}
       </div>
