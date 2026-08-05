@@ -8,6 +8,7 @@ domain. Markdown checkboxes; edit by hand. Shipped items go to
 
 Items we're actively working on or planning to do imminently.
 _Nothing active — `node scripts/reconcile.mjs` agrees with ccusage on all 11 models as of 2026-07-28._
+- [ ] **[bug]** **Cost history before ~2026-06-11 is permanently lost, and every total in this dashboard understates because of it.** Claude Code's `cleanupPeriodDays` defaults to 30 and was not set until 2026-07-27 (confirmed: the May 28 settings backup has no such key), so transcripts were being deleted continuously until then. `~/.claude/history.jsonl` survived the sweep and records 471 prompts in March, 398 in April, 467 in May — 1,336 total, MORE than June (358) + July (662) combined — while tokens.json holds $0 for all of it. The trend panels now trim to the coverage boundary and say so (CoverageNote), but the headline totals, MetricsStrip, burn rate and projections still silently treat the missing months as real zeros. Decide what to do: either scope the headline figures to the coverage window explicitly, or surface a 'data since <date>' qualifier globally. Note the prompts are recoverable but their TOKEN COUNTS ARE NOT — history.jsonl carries no usage, so the spend for that period can never be reconstructed from local data. <!-- added 2026-08-05 --> <!-- added 2026-08-05 -->
 
 ## Soon
 
