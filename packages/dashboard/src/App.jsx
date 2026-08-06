@@ -6,6 +6,7 @@ import UsageChart from './components/UsageChart';
 import ActivityHeatmap from './components/ActivityHeatmap';
 import CostComposition from './components/CostComposition';
 import CostMixTrend from './components/CostMixTrend';
+import PerCallTrend from './components/PerCallTrend';
 import ToolBreakdown from './components/ToolBreakdown';
 import ModelBreakdown from './components/ModelBreakdown';
 import ModelEfficiency from './components/ModelEfficiency';
@@ -122,6 +123,7 @@ export default function App() {
               <UsageChart sessions={filtered} delay={200} />
               <CostComposition sessions={filtered} delay={250} />
               <CostMixTrend sessions={filtered} delay={265} />
+              <PerCallTrend sessions={filtered} delay={272} />
               <ActivityHeatmap sessions={filtered} delay={280} />
               <SessionsTable sessions={filtered} delay={500} onSelect={setSelectedSession} />
             </div>

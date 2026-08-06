@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { addDay, toDailyTokens } from '../daily.js';
 
 function decodeCwdFromDir(dirName) {
   if (dirName.charAt(0) === '-') dirName = dirName.slice(1);
@@ -71,7 +72,22 @@ function parseTranscriptFile(filePath) {
       // Anthropic splits cache writes by TTL and bills the 1-hour tier at 2x
       // input vs 1.25x for 5-minute. Claude Code uses 1h heavily, so tracking
       // the subset separately is worth real money.
-      cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens || 0,
+      //
+      // Clamped to the total HERE, per call, not later per session. 10 of
+      // 103,174 local usage entries report a 1h subset larger than the
+      // cache_creation total it is a subset of (worst excess 1,611 tokens).
+      // pricing.js clamps too, but only once the day/session totals are summed,
+      // so an over-report on one call could hide under other calls' headroom —
+      // which billed the 2x tier for tokens that were never written at it, and
+      // made a session's per-day costs sum to less than its own total.
+      cacheWrite1h: Math.min(
+        usage.cache_creation?.ephemeral_1h_input_tokens || 0,
+        usage.cache_creation_input_tokens || 0
+      ),
+      // The day this call actually happened, which is not the session's start
+      // day for anything long-running. Streamed chunks of one response share a
+      // timestamp to the second, so taking the winner's day below is stable.
+      day: entry.timestamp ? entry.timestamp.slice(0, 10) : null,
     };
     // Entries without an id can't be deduped — key them uniquely by line.
     const id = entry.message.id || `line-${usageById.size}`;
@@ -84,16 +100,24 @@ function parseTranscriptFile(filePath) {
   // session that switches models mid-way (a /model change) attributes each
   // model's tokens correctly instead of hiding the minority under the majority.
   // <synthetic> is Claude Code's own placeholder message, not real model usage.
+  // One entry per message.id IS one API call: the map already collapses the
+  // streamed partial chunks that Claude Code logs under a shared id. Verified
+  // over the full local corpus — 44,539 distinct ids, none appearing in two
+  // transcripts, none lacking an id, none carrying two models.
+  const fallbackDay = firstTimestamp ? firstTimestamp.slice(0, 10) : null;
   const byModel = new Map();
   for (const t of usageById.values()) {
     if (t.model === '<synthetic>') continue;
     const acc = byModel.get(t.model)
-      || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 0 };
+      || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 0, calls: 0, byDay: new Map() };
     acc.input += t.input;
     acc.output += t.output;
     acc.cacheRead += t.cacheRead;
     acc.cacheWrite += t.cacheWrite;
     acc.cacheWrite1h += t.cacheWrite1h;
+    acc.calls += 1;
+    const day = t.day || fallbackDay;
+    if (day) addDay(acc.byDay, day, t);
     byModel.set(t.model, acc);
   }
 
@@ -125,7 +149,7 @@ export function parseClaudeJSON(projectsDir) {
     // tokens x model pricing. (We used to read a recorded cost from
     // ~/.claude.json's `lastCost`, but that file keeps only the most recent
     // session per project and it matched 0 of 2,385 sessions in practice.)
-    const emit = (filePath, baseId) => {
+    const emit = (filePath, baseId, isSubagent) => {
       let transcript;
       try {
         transcript = parseTranscriptFile(filePath);
@@ -153,6 +177,9 @@ export function parseClaudeJSON(projectsDir) {
           cacheReadTokens: tok.cacheRead,
           cacheWriteTokens: tok.cacheWrite,
           cacheWrite1hTokens: tok.cacheWrite1h,
+          apiCalls: tok.calls,
+          isSubagent,
+          dailyTokens: toDailyTokens(tok.byDay),
           cost: 0,
           currency: 'USD',
         });
@@ -163,7 +190,7 @@ export function parseClaudeJSON(projectsDir) {
     for (const file of fs.readdirSync(dirPath)) {
       if (!file.endsWith('.jsonl')) continue;
       const sessionId = file.slice(0, -6);
-      emit(path.join(dirPath, file), `claude_${sessionId}`);
+      emit(path.join(dirPath, file), `claude_${sessionId}`, false);
     }
 
     // Delegated agents (Task tool) write their own transcripts under a
@@ -173,7 +200,7 @@ export function parseClaudeJSON(projectsDir) {
     // own session so per-model tokens and cost attribute correctly; there is
     // no recorded cost for them, so the normalizer estimates from tokens.
     for (const subFile of findSubagentTranscripts(dirPath)) {
-      emit(subFile, `claude_sub_${path.basename(subFile, '.jsonl')}`);
+      emit(subFile, `claude_sub_${path.basename(subFile, '.jsonl')}`, true);
     }
   }
 

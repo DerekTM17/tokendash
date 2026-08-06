@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { addDay, toDailyTokens } from '../daily.js';
 
 function walkRolloutFiles(sessionsDir) {
   const results = [];
@@ -51,7 +52,7 @@ const MAX_PATH_REFS = 10000;
 // session has to wait on a user prompt and a model response first.
 const REPLAY_WINDOW_MS = 2000;
 
-function parseRolloutFile(filePath) {
+function parseRolloutFile(filePath, sessionId) {
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.trim().split('\n');
 
@@ -59,6 +60,14 @@ function parseRolloutFile(filePath) {
   let model = 'unknown';
   let firstTimestamp = null;
   let fileOpenedAt = null;
+  // The replay burst (see REPLAY_WINDOW_MS) carries the PARENT's session_meta
+  // into a child's rollout, so 24 of 68 local files hold two metas whose
+  // `source` disagree — the thread's own first, the parent's second. Last-wins
+  // (the obvious reading, and how `model` is latched below) mislabels every one
+  // of them, which matters because Codex is 61% subagent by cost. Take the
+  // first meta only, and only once its `id` matches the uuid in the filename.
+  let isSubagent = false;
+  let sawOwnMeta = false;
   // Per-model buckets rather than one latched model: a rollout can switch
   // models mid-session (10 of 40 local rollouts do), and billing the whole
   // counter to whichever came first put 642M tokens on gpt-5.6-terra when the
@@ -92,8 +101,19 @@ function parseRolloutFile(filePath) {
       fileOpenedAt = Date.parse(entry.timestamp);
     }
 
-    if (!cwd && entry.type === 'session_meta' && entry.payload?.cwd) {
-      cwd = entry.payload.cwd;
+    if (entry.type === 'session_meta' && entry.payload) {
+      if (!cwd && entry.payload.cwd) cwd = entry.payload.cwd;
+      if (!sawOwnMeta && (!sessionId || entry.payload.id === sessionId)) {
+        sawOwnMeta = true;
+        // `thread_source` is a flat string and is what actually distinguishes
+        // the two metas; `source` is an object for subagents and the string
+        // "cli" otherwise, so fall back to its shape when thread_source is
+        // absent on older rollouts.
+        isSubagent = entry.payload.thread_source
+          ? entry.payload.thread_source === 'subagent'
+          : !!(entry.payload.source && typeof entry.payload.source === 'object'
+            && entry.payload.source.subagent);
+      }
     }
 
     if (!cwd && entry.type === 'turn_context' && entry.payload?.cwd) {
@@ -132,15 +152,35 @@ function parseRolloutFile(filePath) {
       // (total_tokens === input + output in every observed rollout event). Our
       // buckets are disjoint (Claude-transcript semantics), so subtract cached
       // out of input and take output as-is — adding reasoning double-counts.
-      const acc = byModel.get(model) || { input: 0, output: 0, cacheRead: 0 };
-      acc.input += Math.max(0, dInput - dCached);
-      acc.output += dOutput;
-      acc.cacheRead += dCached;
+      const acc = byModel.get(model)
+        || { input: 0, output: 0, cacheRead: 0, calls: 0, byDay: new Map() };
+      const slice = {
+        input: Math.max(0, dInput - dCached),
+        output: dOutput,
+        cacheRead: dCached,
+        cacheWrite: 0,
+        cacheWrite1h: 0,
+      };
+      acc.input += slice.input;
+      acc.output += slice.output;
+      acc.cacheRead += slice.cacheRead;
+      // An event that does NOT advance the counter is a re-report of a call
+      // already counted, not a new one. Codex emits 120 such events locally;
+      // counting them would reintroduce the same ~3% overcount that the delta
+      // arithmetic exists to avoid. Validated against Codex's own
+      // last_token_usage: agreement on 4,484 of 4,484 counted calls.
+      if (slice.input || slice.output || slice.cacheRead) {
+        acc.calls += 1;
+        const day = entry.timestamp
+          ? entry.timestamp.slice(0, 10)
+          : firstTimestamp?.slice(0, 10);
+        if (day) addDay(acc.byDay, day, slice);
+      }
       byModel.set(model, acc);
     }
   }
 
-  return { cwd, model, firstTimestamp, byModel, contentPathRefs };
+  return { cwd, model, firstTimestamp, byModel, contentPathRefs, isSubagent };
 }
 
 export function parseCodexData(codexDir) {
@@ -151,7 +191,7 @@ export function parseCodexData(codexDir) {
   for (const { sessionId, filePath } of rolloutFiles) {
     let transcript;
     try {
-      transcript = parseRolloutFile(filePath);
+      transcript = parseRolloutFile(filePath, sessionId);
     } catch {
       continue;
     }
@@ -165,7 +205,7 @@ export function parseCodexData(codexDir) {
     // counts and project attribution stay intact.
     const models = transcript.byModel.size
       ? [...transcript.byModel.entries()]
-      : [[transcript.model, { input: 0, output: 0, cacheRead: 0 }]];
+      : [[transcript.model, { input: 0, output: 0, cacheRead: 0, calls: 0, byDay: new Map() }]];
 
     for (const [model, tok] of models) {
       sessions.push({
@@ -182,6 +222,9 @@ export function parseCodexData(codexDir) {
         outputTokens: tok.output,
         cacheReadTokens: tok.cacheRead,
         cacheWriteTokens: 0,
+        apiCalls: tok.calls,
+        isSubagent: transcript.isSubagent,
+        dailyTokens: toDailyTokens(tok.byDay),
         contentPathRefs: transcript.contentPathRefs,
         cost: 0,
         currency: 'USD',

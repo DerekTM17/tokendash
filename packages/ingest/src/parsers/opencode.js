@@ -26,13 +26,17 @@ function parseModel(raw, fallback) {
 // used exactly one, so the dominant model is unambiguous; if that ever stops
 // holding, this is the place a per-model split would go (as in claude.js and
 // codex.js), which needs per-message tokens rather than the session totals.
+// Also counts assistant message rows per session, which is opencode's stand-in
+// for an API-call count — the session row carries only aggregates. Folded into
+// this pass rather than a second query since it walks the same rows.
 function modelsByMessage(db) {
   const modelBySession = new Map();
+  const callsBySession = new Map();
   let rows;
   try {
     rows = db.prepare('SELECT session_id, data FROM message WHERE data IS NOT NULL').all();
   } catch {
-    return modelBySession; // older DBs may not have the table
+    return { modelBySession, callsBySession }; // older DBs may not have the table
   }
   const counts = new Map();
   for (const row of rows) {
@@ -41,6 +45,9 @@ function modelsByMessage(db) {
       data = JSON.parse(row.data);
     } catch {
       continue;
+    }
+    if (data.role === 'assistant') {
+      callsBySession.set(row.session_id, (callsBySession.get(row.session_id) || 0) + 1);
     }
     const model = data.modelID;
     if (!model) continue;
@@ -62,7 +69,7 @@ function modelsByMessage(db) {
     }
     if (best) modelBySession.set(sid, best);
   }
-  return modelBySession;
+  return { modelBySession, callsBySession };
 }
 
 // opencode records the same launch directory ($HOME) for every session, so the
@@ -130,7 +137,7 @@ export function parseOpencodeSessions(dbPath) {
     `).all();
 
     const dirBySession = inferSessionDirs(db);
-    const modelBySession = modelsByMessage(db);
+    const { modelBySession, callsBySession } = modelsByMessage(db);
 
     for (const row of rows) {
       // Prefer the project path inferred from the files the session touched;
@@ -139,6 +146,16 @@ export function parseOpencodeSessions(dbPath) {
       const dir = inferredDir || row.directory || '';
       const project = inferredDir ? extractProject(inferredDir) : 'other';
 
+      const startedAt = row.time_created ? new Date(row.time_created).toISOString() : null;
+      const tokens = {
+        input: row.tokens_input || 0,
+        output: (row.tokens_output || 0) + (row.tokens_reasoning || 0),
+        cacheRead: row.tokens_cache_read || 0,
+        cacheWrite: row.tokens_cache_write || 0,
+        cacheWrite1h: 0,
+      };
+      const apiCalls = callsBySession.get(row.id) || 0;
+
       sessions.push({
         id: row.id,
         tool: 'opencode',
@@ -146,13 +163,25 @@ export function parseOpencodeSessions(dbPath) {
         project,
         // The session row wins when it has a model; messages are the fallback.
         model: parseModel(row.model, modelBySession.get(row.id)),
-        startedAt: row.time_created
-          ? new Date(row.time_created).toISOString()
-          : null,
-        inputTokens: row.tokens_input || 0,
-        outputTokens: (row.tokens_output || 0) + (row.tokens_reasoning || 0),
-        cacheReadTokens: row.tokens_cache_read || 0,
-        cacheWriteTokens: row.tokens_cache_write || 0,
+        startedAt,
+        inputTokens: tokens.input,
+        outputTokens: tokens.output,
+        cacheReadTokens: tokens.cacheRead,
+        cacheWriteTokens: tokens.cacheWrite,
+        apiCalls,
+        // opencode has no subagent concept to expose.
+        isSubagent: false,
+        // Single slice at the session start carrying the whole session. The
+        // session row's aggregates are authoritative for tokens and cost, and
+        // rebuilding a per-day split from message rows risks breaking the
+        // "daily sums to session totals" invariant — opencode has revert/undo,
+        // which deletes messages while the aggregates persist. Acceptable
+        // because opencode is 27 sessions and $8.24 lifetime (0.1% of spend),
+        // its sessions are short, and it is not plotted. Revisit if that
+        // changes.
+        dailyTokens: startedAt
+          ? [{ day: startedAt.slice(0, 10), calls: apiCalls, ...tokens }]
+          : [],
         cost: row.cost || 0,
         currency: 'USD',
       });
