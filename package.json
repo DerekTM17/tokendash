@@ -9,7 +9,8 @@
     "watch": "node packages/ingest/src/index.js --watch",
     "dev": "npm run ingest && cd packages/dashboard && npx vite --host 0.0.0.0 --port 5173",
     "build": "npm run ingest && cd packages/dashboard && npx vite build",
-    "test": "node --test packages/ingest/test/*.test.js && node --test packages/hooks/test/*.test.mjs && cd packages/dashboard && npx vitest run",
+    "test": "node --test packages/ingest/test/*.test.js && node --test packages/hooks/test/*.test.mjs && npm run gate && cd packages/dashboard && npx vitest run",
+    "gate": "node packages/hooks/test/backtest.mjs",
     "lint": "npx --prefix packages/dashboard eslint packages/dashboard/src/"
   }
 }
