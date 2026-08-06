@@ -281,3 +281,92 @@ npm test                            # expect 64 ingest + 48 hooks + 86 dashboard
 node --input-type=module -e "import {bucketPerCall} from './packages/dashboard/src/lib/perCall.js';import fs from 'node:fs';console.log(bucketPerCall(JSON.parse(fs.readFileSync('./packages/dashboard/public/tokens.json','utf8')).sessions,'week').slice(-3))"
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5199/   # expect 200
 ```
+
+#### Handoff — Both branches integrated into main; coverage boundary labelled
+
+**Done** — `main` is at `6855723` and now contains BOTH parallel efforts. Both
+feature branches are fully merged ancestors of main; nothing is outstanding on
+either.
+
+Merge order mattered and is worth recording. The two branches shared a
+**duplicated commit** — `6f6df8e` (on `feat/per-call-context`) and `3036638` (on
+`feat/session-boundary-detector`) are the same "keep firedBands across
+compaction" fix committed twice, because the boundary-detector work was started
+on the per-call branch and then re-based into its own worktree. That produced
+exactly one merge conflict, in `packages/hooks/test/bands.test.mjs`, whose two
+versions differed *only* in threshold values (325/450 vs the stale 275/300, 17
+references each).
+
+Resolution: fast-forward `feat/session-boundary-detector` into main FIRST, so
+main holds the authoritative retuned hooks, then merge `feat/per-call-context`
+and take main's side of that one file. Reversed, the same conflict appears but
+framed as "incoming theirs vs ours-that-is-actually-the-old-duplicate", which is
+easy to resolve backwards.
+
+**Verified after merging** — the union had never been tested; each worktree had
+run only its own half.
+
+- `npm test` → **64 ingest + 54 hooks + 95 dashboard, 0 failures**
+- backtest gate → **PASS**, ARM 325k / CEILING 450k over 79 main sessions:
+  29.1% firing (≤35%), 1.83 nudges (≤2.0), 19/19 peak≥500k fire, 0/33 peak<100k
+- dashboard live at :5199 serving from main
+
+**`npm test` now runs the gate.** `backtest.mjs` sits outside the `*.test.mjs`
+glob, so a failing gate exited 1 while `npm test` exited 0 — that is how a red
+gate looked green for two days. Added as an `npm run gate` step; verified it
+genuinely fails (`CTX_ARM_TOKENS=200000 npm test` exits 1 and short-circuits
+before the dashboard suite).
+
+**Also shipped: the coverage boundary.** Both trend panels walked from the
+earliest session, so six near-empty weeks ate ~40% of the width to show $4.08.
+They now trim to the first day with Claude data AND label why — see below.
+
+**⚠️ The finding that matters most this session**
+
+**Cost history before ~2026-06-11 is permanently lost.** Claude Code's
+`cleanupPeriodDays` defaults to **30** and was not set until 2026-07-27 (the
+2026-05-28 settings backup has no such key), so transcripts were being deleted
+continuously until then. `~/.claude/history.jsonl` is NOT swept and still records
+**471 prompts in March, 398 in April, 467 in May — 1,336 total, more than June
+(358) + July (662) combined** — while `tokens.json` holds $0 for all of it.
+history.jsonl carries no token counts, so that spend can never be reconstructed.
+
+Two consequences:
+
+1. **Never answer "is there data before X?" from `tokens.json`.** That is the
+   parser's own output, so the reasoning is circular — this session did exactly
+   that and got it wrong until Derek pushed back. Check `history.jsonl`.
+2. The trend panels are honest about it now, but **the headline totals,
+   MetricsStrip, burn rate and projections still treat the missing months as
+   real zeros**, so lifetime cost and $/day are understated by an unknown amount.
+   Open in BACKLOG under **Now**.
+
+**Still outstanding — the ONE remaining Phase 1 step**
+
+`~/.claude/settings.json` has no `UserPromptSubmit` entry, so the boundary
+detector has never fired. It was deliberately left unwired: it changes global
+Claude Code behaviour for every session and the plan requires explicit human
+confirmation. It is now unblocked — main is checked out in the main worktree, so
+the hook path resolves to the retuned code. Wiring it earlier would have silently
+run the stale 275k/300k thresholds.
+
+```json
+"UserPromptSubmit": [
+  { "hooks": [ { "type": "command",
+    "command": "node /home/dynomatic/opencode/projects/token-dashboard/packages/hooks/context-boundary.mjs" } ] }
+]
+```
+
+**Worktrees** — `token-dashboard` (main) and `token-dashboard-sbd`
+(`feat/session-boundary-detector`, clean, HEAD now an ancestor of main). The
+`-sbd` worktree has no unmerged work and can be removed with
+`git worktree remove token-dashboard-sbd`. Do not run `autostart.sh` or vite from
+it: port 5199 is strict and it would serve the wrong tree.
+
+**Resume**
+
+```sh
+cd ~/opencode/projects/token-dashboard
+npm test                            # expect 64 ingest + 54 hooks + gate PASS + 95 dashboard
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5199/   # expect 200
+```
