@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dataCoverage, trimToCoverage } from '../src/lib/coverage';
+import { dataCoverage, trimToCoverage, coverageWindow } from '../src/lib/coverage';
 
 function dayRow(day, cost = 1) {
   return [day, 1, 0, 0, 0, 0, cost, 0, 0, 0];
@@ -93,5 +93,54 @@ describe('trimToCoverage', () => {
     const days = ['2026-06-09', '2026-06-10', '2026-06-11', '2026-06-12'].map(key => ({ key }));
     const kept = trimToCoverage(days, { start: '2026-06-11' }, 'day');
     expect(kept.map(b => b.key)).toEqual(['2026-06-11', '2026-06-12']);
+  });
+});
+
+describe('coverageWindow', () => {
+  it('returns null when no session carries daily data', () => {
+    expect(coverageWindow([], null)).toBeNull();
+    expect(coverageWindow([session('a', 'claude', 5, [])], null)).toBeNull();
+  });
+
+  it('spans the coverage boundary to the last recorded day, inclusive', () => {
+    const sessions = [
+      session('old', 'opencode', 4, [dayRow('2026-04-27', 4)]),
+      session('big', 'claude', 100, [dayRow('2026-06-11', 60), dayRow('2026-06-12', 40)]),
+    ];
+
+    const w = coverageWindow(sessions, dataCoverage(sessions));
+
+    expect(w.start).toBe('2026-06-11');
+    expect(w.end).toBe('2026-06-12');
+    expect(w.days).toBe(2);
+  });
+
+  it('excludes cost recorded before the boundary from the windowed cost', () => {
+    // The whole point: $4 of April opencode spend must not be divided across a
+    // June-onward window, and must not silently inflate it either.
+    const sessions = [
+      session('old', 'opencode', 4, [dayRow('2026-04-27', 4)]),
+      session('big', 'claude', 100, [dayRow('2026-06-11', 100)]),
+    ];
+
+    const w = coverageWindow(sessions, dataCoverage(sessions));
+
+    expect(w.cost).toBeCloseTo(100, 5);
+    expect(w.excludedCost).toBeCloseTo(4, 5);
+  });
+
+  it('falls back to the earliest recorded day when there is no boundary', () => {
+    const sessions = [session('a', 'claude', 10, [dayRow('2026-06-11', 10)])];
+
+    const w = coverageWindow(sessions, dataCoverage(sessions));
+
+    expect(w.start).toBe('2026-06-11');
+    expect(w.days).toBe(1);
+    expect(w.excludedCost).toBe(0);
+  });
+
+  it('counts a single day as one day, never zero', () => {
+    const sessions = [session('a', 'claude', 10, [dayRow('2026-08-14', 10)])];
+    expect(coverageWindow(sessions, null).days).toBe(1);
   });
 });

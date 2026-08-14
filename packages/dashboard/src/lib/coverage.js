@@ -79,6 +79,52 @@ export function dataCoverage(sessions) {
   return { start, tool, excluded };
 }
 
+/**
+ * The span the record actually covers, and the cost inside it.
+ *
+ * Rates — burn per day, the 30-day projection — are a quotient, and both halves
+ * were wrong. The denominator ran from the earliest session of any tool, so six
+ * near-empty weeks of April opencode activity padded it; the numerator counted
+ * that pre-boundary spend as if it belonged to the Claude window. Neither error
+ * is large in dollars (the excluded spend is ~0.05% of the total) but together
+ * they understate $/day by the ratio of the padded span to the real one.
+ *
+ * Returns `{ start, end, days, cost, excludedCost }`, or null when no session
+ * carries daily data. `days` is inclusive, so a single recorded day is 1 — never
+ * 0, which would divide to Infinity. `excludedCost` is kept rather than dropped
+ * so a caller can account for it instead of letting it disappear.
+ *
+ * Note this window is only as honest as the transcripts behind it: everything
+ * before `start` was deleted by Claude Code's 30-day retention default, so a
+ * lifetime figure is unavailable at any price. See the module header.
+ */
+export function coverageWindow(sessions, coverage) {
+  const start = coverage?.start ?? null;
+  let first = null;
+  let end = null;
+  let cost = 0;
+  let excludedCost = 0;
+
+  for (const s of sessions) {
+    if (!s.daily?.length) continue;
+    for (const [day, , , , , , costInput, costOutput, costCacheRead, costCacheWrite] of s.daily) {
+      const dayCost = costInput + costOutput + costCacheRead + costCacheWrite;
+      if (first === null || day < first) first = day;
+      if (end === null || day > end) end = day;
+      if (start !== null && day < start) excludedCost += dayCost;
+      else cost += dayCost;
+    }
+  }
+  if (end === null) return null;
+
+  const from = start ?? first;
+  const days = Math.max(1, Math.round(
+    (Date.parse(end + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000
+  ) + 1);
+
+  return { start: from, end, days, cost, excludedCost };
+}
+
 /** Drop buckets that end before coverage begins. A bucket is kept when its span
  *  reaches `start`, so the bucket containing the coverage boundary survives with
  *  whatever partial data it holds rather than being cut for starting early. */
