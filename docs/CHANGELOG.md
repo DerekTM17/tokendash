@@ -6,6 +6,12 @@ also include **Tradeoffs / Alternatives considered**.
 
 Curated, not exhaustive — `git log` has every commit.
 
+## 2026-08-14
+
+### Burn rate and projection scoped to the covered window
+
+**Why:** The rate metrics divided total cost by the span from the earliest session of ANY tool, so six near-empty weeks of April opencode activity padded the denominator while that pre-boundary spend sat in the numerator as though it belonged to the window. Live effect: $78.49/day reported over 110 days where the honest figure is $132.77/day over 65 — a 41% understatement, and $2,355/mo projected against $3,983/mo. New coverageWindow() in lib/coverage.js returns { start, end, days, cost, excludedCost } and keeps the excluded $4.08 visible rather than dropping it. The strip also carries a caption now: the totals above are the sum of what survives, not a lifetime figure — transcripts older than 30 days were deleted until cleanupPeriodDays was raised on 2026-07-27, so earlier spend is unrecoverable rather than zero. Deliberately did NOT trim the headline totals to the window: that would discard real dollars to fix a labelling problem.
+
 ## 2026-08-04
 
 ### Session boundary detector — Phase 1 shipped, thresholds retuned to 325k/450k
