@@ -6,6 +6,12 @@ also include **Tradeoffs / Alternatives considered**.
 
 Curated, not exhaustive — `git log` has every commit.
 
+## 2026-08-18
+
+### Tooltips for every term, and the repo published at DerekTM17/tokendash
+
+**Why:** Two things. (1) 23 tooltips — summary cards, metrics strip, the four cost parts and all eleven panel headings — driven by a single glossary in lib/glossary.js so a term cannot drift between panels. The bubble is PORTALLED to document.body: several panels clip their overflow (SummaryCards for its glow) and an absolutely-positioned tooltip is cut off at the card edge. Visibility is React state rather than CSS :hover, which buys keyboard support (focus opens, Escape closes) and makes it testable at all — a CSS-only tooltip is invisible to jsdom and its tests pass either way. glossary.test.js scans components/ for every term= prop and fails on a missing entry; SummaryCards and MetricsStrip pass theirs dynamically so they carry their own assertions. Verified in Chromium: 23 tooltips at 1440px and 900px, none leaving the viewport. (2) Published PUBLIC at https://github.com/DerekTM17/tokendash with README, MIT license and a screenshot. autostart.sh no longer hardcodes one machine: ROOT resolves from the script's own location, and node resolution falls back to the highest nvm version because cron does not source a login shell — command -v node finds nothing there. TOKENDASH_NODE_BIN overrides. Decision on docs: kept the engineering diary intact, real spend figures and all, because the design rationale is what makes the code legible to a reader. tokens.json stays gitignored so no usage data is published.
+
 ## 2026-08-14
 
 ### Burn rate and projection scoped to the covered window
