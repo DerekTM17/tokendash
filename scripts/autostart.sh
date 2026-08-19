@@ -8,12 +8,31 @@
 #
 # Install (once):
 #   (crontab -l 2>/dev/null; \
-#    echo '@reboot /home/dynomatic/opencode/projects/token-dashboard/scripts/autostart.sh'; \
-#    echo '*/10 * * * * /home/dynomatic/opencode/projects/token-dashboard/scripts/autostart.sh') | crontab -
+#    echo "@reboot $PWD/scripts/autostart.sh"; \
+#    echo "*/10 * * * * $PWD/scripts/autostart.sh") | crontab -
 
-# node lives under nvm, which cron doesn't source — hardcode its bin dir.
-PATH=/home/dynomatic/.nvm/versions/node/v24.14.0/bin:/usr/local/bin:/usr/bin:/bin
-ROOT=/home/dynomatic/opencode/projects/token-dashboard
+# Resolve the checkout from this script's own location, so a clone anywhere
+# works without editing the file.
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+# cron does not source a login shell, so a node installed by nvm is NOT on PATH
+# here — `command -v node` finds nothing under cron even though it works in a
+# terminal. Fall back to the highest nvm-managed version, and let anyone with a
+# different layout skip the guessing entirely via TOKENDASH_NODE_BIN.
+NODE_BIN=${TOKENDASH_NODE_BIN:-}
+if [ -z "$NODE_BIN" ]; then
+    NODE_BIN=$(command -v node 2>/dev/null | xargs -r dirname)
+fi
+if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN/node" ]; then
+    NODE_BIN=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)
+fi
+PATH=${NODE_BIN:-/usr/bin}:/usr/local/bin:/usr/bin:/bin
+export PATH
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "$(date -Is) no node on PATH — set TOKENDASH_NODE_BIN" >>"${LOG:-/tmp/token-dashboard.log}"
+    exit 1
+fi
 PORT=5199
 LOG=/tmp/token-dashboard.log
 WATCH_PID=/tmp/token-dashboard-watch.pid
