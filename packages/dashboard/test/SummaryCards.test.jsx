@@ -19,6 +19,15 @@ describe('SummaryCards', () => {
     expect(screen.getByText('47')).toBeDefined();
   });
 
+  it('explains every card label, including the ones passed dynamically', () => {
+    // These terms reach InfoTip as {card.label}, so glossary.test.js's scan for
+    // literal term="..." props cannot see them.
+    render(<SummaryCards totals={sampleTotals} />);
+    for (const label of ['total cost', 'tokens', 'sessions']) {
+      expect(screen.getByRole('button', { name: `What is ${label}?` }), label).toBeDefined();
+    }
+  });
+
   it('renders empty state', () => {
     render(<SummaryCards totals={null} />);
     expect(screen.queryByText('$')).toBe(null);

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { formatCost, formatTokens } from '../lib/format';
 import { dataCoverage, coverageWindow } from '../lib/coverage';
+import InfoTip from './InfoTip';
 
 function tokensOf(s) {
   return s.inputTokens + s.outputTokens + (s.cacheReadTokens || 0) + (s.cacheWriteTokens || 0);
@@ -58,7 +59,7 @@ export default function MetricsStrip({ sessions, delay = 0 }) {
           className="flex-1"
           style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '13px 16px' }}
         >
-          <div className="hud-label" style={{ fontSize: 8.5, color: 'var(--color-text-muted)', marginBottom: 8 }}>{it.label}</div>
+          <div className="hud-label" style={{ fontSize: 8.5, color: 'var(--color-text-muted)', marginBottom: 8 }}>{it.label}<InfoTip term={it.label} /></div>
           <div className="mono" style={{ fontSize: 21, fontWeight: 600, color: it.color, lineHeight: 1 }}>{it.value}</div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 5, letterSpacing: '0.04em' }}>{it.unit}</div>
         </div>

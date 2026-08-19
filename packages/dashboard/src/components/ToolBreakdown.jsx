@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { formatCost, formatTokens } from '../lib/format';
 import MetricToggle from './MetricToggle';
+import InfoTip from './InfoTip';
 
 const TOOL_COLORS = { claude: '#5cc8ff', opencode: '#b48cff', codex: '#34e6a4', other: '#7f9cae' };
 
@@ -31,7 +32,7 @@ export default function ToolBreakdown({ sessions, delay = 0, onSelect }) {
       <div style={{ background: 'var(--color-card)', borderRadius: 12, border: '1px solid var(--color-border)', padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
-            By tool
+            By tool<InfoTip term="By tool" />
           </div>
           <MetricToggle metric={metric} setMetric={setMetric} />
         </div>

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { formatCost } from '../lib/format';
+import InfoTip from './InfoTip';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOUR_TICKS = [0, 6, 12, 18];
@@ -25,7 +26,7 @@ export default function ActivityHeatmap({ sessions, delay = 0 }) {
       <div style={{ background: 'var(--color-card)', borderRadius: 12, border: '1px solid var(--color-border)', padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
-            Activity by hour
+            Activity by hour<InfoTip term="Activity by hour" />
           </div>
           <span className="hud-label" style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>sessions · local time</span>
         </div>

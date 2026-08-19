@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
 import { formatTokens, formatCost, formatAxisDollars } from '../lib/format';
 import ToggleButton from './ToggleButton';
+import InfoTip from './InfoTip';
 
 function groupByDayAndTool(sessions) {
   const map = {};
@@ -78,7 +79,7 @@ export default function UsageChart({ sessions, delay = 0 }) {
       <div style={{ background: 'var(--color-card)', borderRadius: 14, border: '1px solid var(--color-border)', padding: '20px 20px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
-            Usage over time
+            Usage over time<InfoTip term="Usage over time" />
           </div>
           <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 9, background: 'var(--color-detail-bg)', border: '1px solid var(--color-border)' }}>
             <ToggleButton active={metric === 'tokens'} onClick={() => setMetric('tokens')}>Tokens</ToggleButton>

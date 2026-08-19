@@ -44,6 +44,13 @@ describe('MetricsStrip', () => {
     expect(screen.queryByText(/since /)).toBe(null);
   });
 
+  it('explains every metric label, including the ones passed dynamically', () => {
+    render(<MetricsStrip sessions={skewed} />);
+    for (const label of ['burn rate', 'projected', 'cache % of cost', 'tokens / $', 'coverage']) {
+      expect(screen.getByRole('button', { name: `What is ${label}?` }), label).toBeDefined();
+    }
+  });
+
   it('renders nothing without sessions', () => {
     const { container } = render(<MetricsStrip sessions={[]} />);
     expect(container.firstChild).toBe(null);

@@ -1,4 +1,5 @@
 import { formatCost, formatTokens } from '../lib/format';
+import InfoTip from './InfoTip';
 
 export default function SummaryCards({ totals, delay = 0 }) {
   if (!totals) return null;
@@ -51,6 +52,7 @@ export default function SummaryCards({ totals, delay = 0 }) {
               }}
             >
               {card.label}
+              <InfoTip term={card.label} />
             </div>
           </div>
         </div>

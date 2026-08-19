@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { formatCost } from '../lib/format';
 import { PARTS } from '../lib/costParts';
+import InfoTip from './InfoTip';
 
 export default function CostComposition({ sessions, delay = 0 }) {
   const { agg, total } = useMemo(() => {
@@ -20,7 +21,7 @@ export default function CostComposition({ sessions, delay = 0 }) {
       <div style={{ background: 'var(--color-card)', borderRadius: 12, border: '1px solid var(--color-border)', padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
-            Where the cost goes
+            Where the cost goes<InfoTip term="Where the cost goes" />
           </div>
           <span className="mono" style={{ fontSize: 12, color: 'var(--color-cost)', fontWeight: 600 }}>{formatCost(total)}</span>
         </div>
@@ -46,7 +47,7 @@ export default function CostComposition({ sessions, delay = 0 }) {
                 <div key={r.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <span style={{ width: 8, height: 8, borderRadius: 2, background: r.color, boxShadow: `0 0 8px ${r.color}`, flexShrink: 0 }} />
-                    <span style={{ fontFamily: 'var(--f-body)', fontSize: 12.5, color: 'var(--color-text-secondary)' }}>{r.label}</span>
+                    <span style={{ fontFamily: 'var(--f-body)', fontSize: 12.5, color: 'var(--color-text-secondary)' }}>{r.label}<InfoTip term={r.label} /></span>
                   </span>
                   <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
                     <span className="mono" style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{r.pct.toFixed(1)}%</span>

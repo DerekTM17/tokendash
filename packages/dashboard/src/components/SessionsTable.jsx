@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { formatCost, formatTokens, formatDate } from '../lib/format';
+import InfoTip from './InfoTip';
 
 const TOOL_COLORS = { claude: '#5cc8ff', opencode: '#b48cff', codex: '#34e6a4' };
 
@@ -16,7 +17,7 @@ export default function SessionsTable({ sessions, delay = 0, onSelect }) {
       <div style={{ background: 'var(--color-card)', borderRadius: 12, border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         <div style={{ padding: '18px 20px 12px' }}>
           <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
-            Recent sessions
+            Recent sessions<InfoTip term="Recent sessions" />
           </div>
         </div>
         {sorted.length === 0 ? (

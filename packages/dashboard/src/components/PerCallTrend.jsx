@@ -8,6 +8,7 @@ import { dataCoverage, trimToCoverage } from '../lib/coverage';
 import { formatTokens, formatAxisDollars } from '../lib/format';
 import ToggleButton from './ToggleButton';
 import CoverageNote from './CoverageNote';
+import InfoTip from './InfoTip';
 
 // One hue per tool, weaker for subagent, so the eye reads tool first and kind
 // second. Claude keeps the cyan it carries elsewhere on the page; Codex takes
@@ -104,7 +105,7 @@ export default function PerCallTrend({ sessions, delay = 0 }) {
       <div style={{ background: 'var(--color-card)', borderRadius: 14, border: '1px solid var(--color-border)', padding: '20px 20px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
           <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
-            Per API call
+            Per API call<InfoTip term="Per API call" />
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 9, background: 'var(--color-detail-bg)', border: '1px solid var(--color-border)' }}>

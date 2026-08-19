@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { formatCost, formatTokens } from '../lib/format';
+import InfoTip from './InfoTip';
 
 const PALETTE = ['#5cc8ff', '#ff8a3d', '#b48cff', '#34e6a4', '#ffd23d', '#ff6ea9', '#6ad0c0', '#9a8cff'];
 
@@ -30,7 +31,7 @@ export default function ModelEfficiency({ sessions, delay = 0 }) {
     <div className="animate-in" style={{ animationDelay: `${delay}ms` }}>
       <div style={{ background: 'var(--color-card)', borderRadius: 12, border: '1px solid var(--color-border)', padding: '20px' }}>
         <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 4 }}>
-          Model efficiency
+          Model efficiency<InfoTip term="Model efficiency" />
         </div>
         <div className="hud-label" style={{ fontSize: 8.5, color: 'var(--color-text-muted)', marginBottom: 14 }}>
           cost per session · tokens per dollar

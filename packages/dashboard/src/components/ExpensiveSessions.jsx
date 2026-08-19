@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { formatCost, formatTokens, formatDate } from '../lib/format';
+import InfoTip from './InfoTip';
 
 const TOOL_COLORS = { claude: '#5cc8ff', opencode: '#b48cff', codex: '#34e6a4' };
 
@@ -13,7 +14,7 @@ export default function ExpensiveSessions({ sessions, delay = 0, limit = 8, onSe
     <div className="animate-in" style={{ animationDelay: `${delay}ms` }}>
       <div style={{ background: 'var(--color-card)', borderRadius: 12, border: '1px solid var(--color-border)', padding: '20px' }}>
         <div style={{ fontFamily: 'var(--f-display)', fontSize: 13, fontWeight: 600, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 16 }}>
-          Top sessions by cost
+          Top sessions by cost<InfoTip term="Top sessions by cost" />
         </div>
         {top.length === 0 ? (
           <span style={{ fontFamily: 'var(--f-body)', fontSize: 13, color: 'var(--color-text-muted)' }}>No data</span>
