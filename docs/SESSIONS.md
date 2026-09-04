@@ -370,3 +370,103 @@ cd ~/opencode/projects/token-dashboard
 npm test                            # expect 64 ingest + 54 hooks + gate PASS + 95 dashboard
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5199/   # expect 200
 ```
+
+## 2026-09-03
+
+#### Handoff — Analysis layer, 13 of 15 tasks landed
+
+**Goal.** Build the Analysis layer (driver decomposition + guarded intervention
+measurement) so TokenDash can answer *why the bill moved* and *did that change
+help* — the first of three layers toward a work-usable copy, informed by Uber's
+"efficient software factory" cost equation.
+
+**Branch.** `feat/analysis-layer`, 24 commits ahead of `main`. Working tree clean.
+
+**Done and verified** (every figure below was measured, not assumed):
+
+- Spec `docs/superpowers/specs/2026-09-03-analysis-layer-design.md`, revised
+  after an adversarial review that found three blockers.
+- Plan `docs/superpowers/plans/2026-09-03-analysis-layer.md`, 15 tasks.
+- Tasks 1-12 complete, each through implement -> task review -> (fix round) ->
+  re-review. Task 13 committed at `87671d5` but **its review was never
+  dispatched** — that is the resume point.
+- `npm test` green at last run: 165 dashboard tests, 88 hooks, ingest suite,
+  backtest gate.
+
+Measured against the real local corpus, not fixtures:
+- Turn counting: 1,609 main-thread turns, 0 subagent turns, 0 sessions
+  breaching the `requests/turn >= 1` floor (lowest observed exactly 1.000).
+- **Requests/Turn = 32.8** (main + subagent requests over main-thread turns).
+- Five-factor identity reconciles to cost with **relative error 0.00e+0**.
+- Turn coverage 95.0% of spend; `cost + excludedCost` reconciles exactly.
+- Intervention guards on real data: 2026-07-22 -> `confounded`, 2026-06-12 ->
+  `refused` for coverage, 2026-07-22 with shifts pre-registered -> `supported`.
+
+**Next — start here, cold:**
+
+1. Dispatch the Task 13 task review. `BASE 0da01a7`, `HEAD 87671d5`.
+   Build the package with
+   `<sdd-skill>/scripts/review-package docs/superpowers/plans/2026-09-03-analysis-layer.md 0da01a7 87671d5`.
+2. Task 14 (freeze matured intervention results to a sidecar), Task 15 (docs +
+   real-corpus verification).
+3. Final whole-branch review on the most capable model, over
+   `git merge-base main HEAD`..HEAD. **Point it at every ledger line marked
+   "FLAG AT FINAL REVIEW"** — those are deferred minors awaiting triage.
+4. `rm -rf .superpowers/sdd/2026-09-03-analysis-layer`, then
+   `superpowers:finishing-a-development-branch`.
+
+**The ledger is the real handoff.** `.superpowers/sdd/2026-09-03-analysis-layer/progress.md`
+carries the pre-flight conflict table, all 16 rulings with their cost-if-wrong,
+every deferred minor, and per-task commit ranges. Read it before acting. It is
+gitignored, so it survives only on this machine.
+
+**Decisions worth not re-litigating** (full reasoning in the ledger):
+
+- Factor 1 is **Active Days**, not Sessions. 85 of 2,729 sessions are multi-day
+  but carry 76.9% of cost, so start-date assignment would misplace three
+  quarters of spend.
+- `Requests/Turn` puts **subagent requests in the numerator** and main-thread
+  turns only in the denominator. A Task dispatch is the most consequential form
+  of tool-call amplification there is.
+- Sequential attribution is displayed; **LMDI is an oracle only**, never shown.
+- The `orderSensitive` disagreement gap is scaled by **max|contribution|** —
+  not by the total (explodes when factors cancel) and not by spend level
+  (dilutes a real instability inside a big-spend period).
+- The coverage floor comes from **`firstCoveredDay`**, never
+  `dataCoverage().start` — the latter returns `null` on a single-tool corpus,
+  which is exactly the intended work deployment.
+- `evaluate` **throws** on a missing/malformed `today` rather than defaulting.
+  A default would paper over a caller bug and make future tests time-dependent.
+- `FACTOR_KEYS` is deliberately duplicated in ingest and dashboard; the
+  dashboard does not import from ingest by design.
+
+**Gotchas discovered the hard way:**
+
+- **An always-on TokenDash watcher on this machine** (cron `scripts/autostart.sh`,
+  serving localhost:5199) holds an older normalizer in memory and silently
+  overwrote fresh ingest output with stale rows during Task 4. Always verify via
+  `node packages/ingest/src/index.js --output=<scratch>`, never `npm run ingest`.
+- **`parseClaudeJSON` scans its base dir for project *directories*.** A fixture
+  writing a transcript straight into `tmpdir()` parses to zero sessions, so
+  assertions pass vacuously. Nest at `<base>/proj/<name>.jsonl`.
+- **`test/glossary.test.js` only sees literal `term="..."` strings.** Any
+  `term={expr}` is invisible to it, so a typo renders no tooltip and no test
+  fails. Both new panels carry colocated `TERMS` guards; any future panel needs
+  one too.
+- **`@testing-library/jest-dom` is NOT wired** into `test/setup.js`. Use
+  `.toBeTruthy()` / `.toBe(null)`, never `.toBeInTheDocument()`.
+- **`CostMixTrend`'s YAxis uses `yAxisId="left"/"right"`**, not the default, so a
+  `ReferenceLine` without an explicit `yAxisId` throws at render.
+- Claude Code logs tool results, system reminders, slash-command echoes,
+  compaction summaries and interrupt markers as `type: "user"` entries. Naive
+  counting overcounts turns 11.6x; `last-prompt` is not a usable proxy (matched
+  the true count in 0 of 40 transcripts).
+
+**Resume:**
+
+```sh
+cd ~/opencode/projects/token-dashboard
+git checkout feat/analysis-layer
+cat .superpowers/sdd/2026-09-03-analysis-layer/progress.md   # read this first
+npm test
+```
