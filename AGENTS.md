@@ -70,6 +70,14 @@ plugin-install session must NOT get pinned to the project it happened to mention
 
 - Define "tokens" ONE way (decide whether cache tokens count) and use it in totals, tables, and
   charts identically. Inconsistency here is a bug.
+- **Two "tokens per X" measures exist on purpose and must NOT be unified.** `Tokens/Request` in
+  `packages/dashboard/src/lib/factors.js` (the driver decomposition panel) counts ALL FOUR buckets —
+  input, output, cacheRead, cacheWrite — because the factor identity has to multiply back out to the
+  same cost the rest of the dashboard prices from all four. Per-call context in
+  `packages/dashboard/src/lib/perCall.js` (`PerCallTrend`) counts THREE — input, cacheRead,
+  cacheWrite — because it answers "how big was the prompt the model was handed," and the model's
+  output is not part of what it was handed. Both are correct for what they measure; a future reader
+  who notices they disagree and "fixes" one to match the other will break whichever one they touch.
 - Every parser needs an integration test that runs the real parser against a small trimmed real
   fixture and asserts non-zero, correctly-shaped output — not just component tests with fake props.
 - Commands: `npm run ingest`, `npm run dev`, `npm run build`, `npm test`.

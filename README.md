@@ -74,6 +74,39 @@ before you start caring about the history.**
 and its own bill, so it appears as its own session rather than folded into its
 parent.
 
+## Driver decomposition and interventions
+
+Two panels answer "why did my bill move" rather than "how much was it."
+
+**Driver decomposition** multiplies cost out into five factors — active days x
+turns per active day x requests per turn x tokens per request x price per
+token — so a change in the total can be pinned on one of them instead of
+argued about qualitatively. A "turn" is a real prompt, not a tool result (see
+`AGENTS.md` for how that distinction is made), and everything is day-sliced
+the same way the per-call panel is, so a session spanning a week does not get
+its whole cost credited to the day it started. `Tokens/Request` here counts
+all four token buckets — input, output, cacheRead, cacheWrite — because the
+factors have to multiply back out to the same cost the rest of the dashboard
+shows. That is a different measure from the per-call context panel above,
+which deliberately excludes output; see `AGENTS.md`.
+
+**Interventions** answer "did that change actually work?" You declare a
+change before it happens: copy `interventions.example.json` to
+`interventions.json` at the repo root and write down the date, a label, and
+the one factor you expect it to move. `interventions.json` is gitignored and
+never leaves your machine. Declaring `expect` before looking at the result is
+the whole mechanism — with five factors and two directions there are ten ways
+to find a flattering number after the fact, and a factor picked once you have
+already seen the outcome proves nothing. Re-run ingest and the panel compares
+matched before/after windows, checks whether something else moved at the same
+time that could explain the shift instead (model mix, project mix, subagent
+share, cache mix), and reports a verdict — supported, not supported,
+confounded, underpowered, provisional, pending, or refused — with the
+reasoning spelled out rather than just a number. Once a before-window ages
+out of the 30-day retention sweep a verdict can no longer be recomputed, so a
+matured result can be hand-frozen into `interventions.results.json` (also
+gitignored) to keep the record past that point.
+
 ## Optional: the session boundary detector
 
 `packages/hooks` is a separate, opt-in piece: a `UserPromptSubmit` hook that
