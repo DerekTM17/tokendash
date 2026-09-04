@@ -131,9 +131,15 @@ export function evaluate(sessions, intervention, options = {}) {
     afterFrom: shift(date, 1), afterTo: shift(date, n),
   };
   const reasons = [];
+  // `expect` names a factor AND a direction. Two of the five factors are levers
+  // you want to go UP — the spec's own table calls ActiveDays adoption and
+  // Turns/ActiveDay engagement — so hardcoding "lower is better" reports an
+  // adoption rate that doubled as `not-supported`. `direction` is optional and
+  // defaults to 'down' (see readInterventions), so a declaration written before
+  // the field existed keeps exactly the meaning it had.
+  const up = intervention.direction === 'up';
   const base = {
-    windows, declared: intervention.expect,
-    direction: intervention.direction === 'up' ? 'up' : 'down',
+    windows, declared: intervention.expect, direction: up ? 'up' : 'down',
     reasons, confounds: [],
   };
 
@@ -213,7 +219,7 @@ export function evaluate(sessions, intervention, options = {}) {
     `Only ${before.activeDays} active days before and ${after.activeDays} after, ` +
     `below the ${opts.minActiveDays}-day minimum.`;
   const unexpected = confounds.filter(c => !c.expected);
-  const confoundReason = `Something other than the intervention moved: ` +
+  const confoundReason = () => `Something other than the intervention moved: ` +
     unexpected.map(c => `${c.dimension}/${c.category}`).join(', ') + '.';
 
   // Guard 2 (Maturity) is settled BEFORE power and confounds, because "this is
@@ -236,7 +242,7 @@ export function evaluate(sessions, intervention, options = {}) {
       `counting today. This is not a final result.`
     );
     if (thin) reasons.push(`${thinReason} Watch it accumulate.`);
-    if (unexpected.length) reasons.push(confoundReason);
+    if (unexpected.length) reasons.push(confoundReason());
     return { ...result, verdict: 'provisional' };
   }
 
@@ -246,17 +252,10 @@ export function evaluate(sessions, intervention, options = {}) {
   }
 
   if (unexpected.length) {
-    reasons.push(confoundReason);
+    reasons.push(confoundReason());
     return { ...result, verdict: 'confounded' };
   }
 
-  // `expect` names a factor AND a direction. Two of the five factors are levers
-  // you want to go UP — the spec's own table calls ActiveDays adoption and
-  // Turns/ActiveDay engagement — so hardcoding "lower is better" reports an
-  // adoption rate that doubled as `not-supported`. `direction` is optional and
-  // defaults to 'down' (see readInterventions), so a declaration written before
-  // the field existed keeps exactly the meaning it had.
-  const up = intervention.direction === 'up';
   const b = before[intervention.expect];
   const a = after[intervention.expect];
   const moved = up ? a > b : a < b;

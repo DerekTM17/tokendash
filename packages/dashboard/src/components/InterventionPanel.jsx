@@ -105,8 +105,8 @@ export default function InterventionPanel({ sessions, interventions = [], today,
 
                 <p style={{ fontFamily: 'var(--f-body)', fontSize: 11.5, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
                   {iv.date} — predicted to move {FACTOR_LABELS[iv.expect] || iv.expect}
-                  <InfoTip term={TERMS[iv.expect]} />
                   {' '}{iv.direction === 'up' ? 'up' : 'down'}
+                  <InfoTip term={TERMS[iv.expect]} />
                 </p>
 
                 {iv.result && (
