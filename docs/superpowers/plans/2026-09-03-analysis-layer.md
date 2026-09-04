@@ -432,10 +432,17 @@ describe('subagent turns', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run the test**
 
 Run: `node --test packages/ingest/test/claude.test.js`
-Expected: PASS if Task 2's `!isSubagent` guard is correct. **If it FAILS**, the guard was omitted — add `!isSubagent &&` to the `userTurns` expression in `emit` before proceeding.
+Expected: **PASS.** This is deliberate. Unlike every other task here, this test
+is a characterization/regression guard rather than TDD-red — the behaviour it
+locks down is introduced in Task 2, and it is worth 2.75x on the headline
+factor, so it earns a test that fails loudly if anyone later drops the
+`!isSubagent` clause. Do not treat "passed on first run" as a defect.
+
+**If it FAILS**, Task 2's guard was omitted — add `!isSubagent &&` to the
+`userTurns` expression in `emit` before proceeding.
 
 - [ ] **Step 3: Verify against the real corpus**
 
@@ -526,10 +533,22 @@ Immediately before that `return` inside the `.map`, guard the contract:
     // length so a third column-ordering bug cannot hide here.
 ```
 
-Add the assertion after the `.map(...)` call, replacing `return slices.map(d => {...});` with:
+Then add the length check. Do **not** rewrite the `.map` callback — keep its
+existing body exactly as it is, including the pricing logic. Only change the
+statement that returns it: where the function currently ends with
 
 ```js
-  const rows = slices.map(d => { /* ...unchanged body... */ });
+  return slices.map(d => {
+```
+
+...assign that same expression to a local instead, and check the rows before
+returning them. Concretely, change the final `return slices.map(d => {` to
+`const rows = slices.map(d => {`, leave the entire callback body untouched, and
+replace the closing `});` of that statement with:
+
+```js
+  });
+
   for (const row of rows) {
     if (row.length !== DAILY_COLUMNS.length) {
       throw new Error(
@@ -1717,12 +1736,22 @@ Add to `packages/dashboard/src/lib/glossary.js`, following the house style (say 
   },
 ```
 
+**Styling — follow the house pattern, not the sketch below's class names.**
+This project styles components with inline styles over CSS custom properties,
+wrapped in an `animate-in` div. Open `packages/dashboard/src/components/CostMixTrend.jsx`
+and mirror its outer structure exactly: the `<div className="animate-in"
+style={{ animationDelay }}>` wrapper, the card `<div>` using
+`var(--color-card)`, `var(--color-border)`, and the uppercase display heading
+using `var(--f-display)` and `var(--cyan)`. The class names `panel`, `muted` and
+`warn` used below are shorthand for "the house equivalent" — they do not exist
+in `index.css` and must not be introduced.
+
 ```jsx
 // packages/dashboard/src/components/DriverDecomposition.jsx
 import { useMemo } from 'react';
 import { factorsFor, FACTOR_KEYS } from '../lib/factors.js';
 import { decompose } from '../lib/decompose.js';
-import { formatDollars } from '../lib/format.js';
+import { formatCost } from '../lib/format.js';
 import InfoTip from './InfoTip.jsx';
 
 const LABELS = {
@@ -1779,7 +1808,7 @@ export default function DriverDecomposition({ sessions, delay = 0 }) {
         <>
           <p className="muted">
             {result.w.beforeFrom}–{result.w.beforeTo} compared with {result.w.afterFrom}–{result.w.afterTo}.
-            Total change {formatDollars(result.total)}.
+            Total change {formatCost(result.total)}.
           </p>
 
           {result.orderSensitive && (
@@ -1800,7 +1829,7 @@ export default function DriverDecomposition({ sessions, delay = 0 }) {
                   <td>{LABELS[k]}<InfoTip term={TERMS[k]} /></td>
                   <td>{result.before[k].toPrecision(4)}</td>
                   <td>{result.after[k].toPrecision(4)}</td>
-                  <td>{formatDollars(result.contributions[k])}</td>
+                  <td>{formatCost(result.contributions[k])}</td>
                 </tr>
               ))}
             </tbody>
@@ -1808,7 +1837,7 @@ export default function DriverDecomposition({ sessions, delay = 0 }) {
 
           {result.before.excludedCost + result.after.excludedCost > 0 && (
             <p className="muted">
-              {formatDollars(result.before.excludedCost + result.after.excludedCost)} excluded:
+              {formatCost(result.before.excludedCost + result.after.excludedCost)} excluded:
               only Claude Code records the user turns this breakdown needs.
             </p>
           )}
@@ -1911,6 +1940,10 @@ Add to `glossary.js`:
     body: 'Supported means the factor you predicted moved the way you said. Confounded means something else moved too, so the result cannot be pinned on the change. Underpowered means too few active days to tell. Refused means the comparison could not be made honestly at all — usually because the baseline reaches into transcripts that were deleted.',
   },
 ```
+
+**Styling:** same house pattern as Task 11 — mirror `CostMixTrend.jsx`'s
+wrapper, card and heading. `panel`/`muted`/`warn`/`good` below stand in for the
+house equivalents and must not be introduced as real class names.
 
 ```jsx
 // packages/dashboard/src/components/InterventionPanel.jsx
@@ -2053,7 +2086,13 @@ In both components, import `ReferenceLine` from `recharts`, accept `intervention
       ))}
 ```
 
-Use each file's existing `bucketKey` and `granularity` so the marker lands on the same bucket the series uses. In `App.jsx`, pass `interventions={data?.interventions || []}` to both.
+`bucketKey` is currently module-private in both `lib/perCall.js` (line 50) and
+`lib/costMix.js` (line 21). **Export it from both** and import it into the
+matching component — recomputing the bucket in the component would risk drifting
+from the key the series actually uses. `granularity` is already component state
+in both files.
+
+In `App.jsx`, pass `interventions={data?.interventions || []}` to both.
 
 **Note:** `UsageChart.test.jsx` does not mock `ResponsiveContainer`, so its chart assertions pass vacuously (`BACKLOG` tech-debt item). Do not add marker tests there until that mock is applied.
 
