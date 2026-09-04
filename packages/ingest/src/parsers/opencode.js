@@ -169,6 +169,10 @@ export function parseOpencodeSessions(dbPath) {
         cacheReadTokens: tokens.cacheRead,
         cacheWriteTokens: tokens.cacheWrite,
         apiCalls,
+        // opencode transcripts have no concept of a human turn to count —
+        // null, never 0, so mixed-tool Requests/Turn aggregates don't get
+        // corrupted.
+        userTurns: null,
         // opencode has no subagent concept to expose.
         isSubagent: false,
         // Single slice at the session start carrying the whole session. The

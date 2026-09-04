@@ -223,6 +223,9 @@ export function parseCodexData(codexDir) {
         cacheReadTokens: tok.cacheRead,
         cacheWriteTokens: 0,
         apiCalls: tok.calls,
+        // Codex transcripts have no concept of a human turn to count — null,
+        // never 0, so mixed-tool Requests/Turn aggregates don't get corrupted.
+        userTurns: null,
         isSubagent: transcript.isSubagent,
         dailyTokens: toDailyTokens(tok.byDay),
         contentPathRefs: transcript.contentPathRefs,

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { normalize } from '../src/normalizer.js';
+import { normalize, TURN_CAPABLE_TOOLS } from '../src/normalizer.js';
 
 const projects = [
   { name: 'attractor', path: '/home/test/projects/attractor' },
@@ -159,5 +159,35 @@ describe('unidentified-model detection', () => {
       session({ id: 'a', model: 'claude-opus-5', inputTokens: 100 }),
     ], projects);
     assert.deepStrictEqual(unknownModelSessions, { sessions: 0, tokens: 0 });
+  });
+});
+
+describe('turn capability', () => {
+  it('names claude as the only turn-capable tool', () => {
+    assert.ok(TURN_CAPABLE_TOOLS.has('claude'));
+    assert.equal(TURN_CAPABLE_TOOLS.has('codex'), false);
+    assert.equal(TURN_CAPABLE_TOOLS.has('opencode'), false);
+  });
+
+  it('reports null turns for tools that cannot count them, never zero', () => {
+    const { normalized } = normalize([
+      { id: 'x', tool: 'codex', model: 'gpt-5', startedAt: '2026-07-01T00:00:00Z',
+        inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0,
+        apiCalls: 4, dailyTokens: [{ day: '2026-07-01', calls: 4, input: 100, output: 10, cacheRead: 0, cacheWrite: 0 }] },
+    ], []);
+    assert.strictEqual(normalized[0].userTurns, null,
+      'zero would make requests/turn infinite and corrupt mixed-tool aggregates');
+  });
+
+  it('reports the share of cost the decomposition can cover', () => {
+    const mk = (id, tool, turns) => ({
+      id, tool, model: 'claude-opus-5', startedAt: '2026-07-01T00:00:00Z',
+      inputTokens: 1000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+      apiCalls: 2, userTurns: turns,
+      dailyTokens: [{ day: '2026-07-01', calls: 2, input: 1000, output: 0, cacheRead: 0, cacheWrite: 0, turns: turns || 0 }],
+    });
+    const { totals } = normalize([mk('a', 'claude', 1), mk('b', 'codex', null)], []);
+    assert.ok(totals.turnCoverage.share > 0 && totals.turnCoverage.share < 1);
+    assert.ok(totals.turnCoverage.excludedCost > 0);
   });
 });

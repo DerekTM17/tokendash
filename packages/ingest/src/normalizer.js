@@ -2,6 +2,16 @@ import { discoverProjects, matchProject } from './discovery.js';
 import { estimateCost, costBreakdown } from './pricing.js';
 import { DAILY_COLUMNS } from './daily.js';
 
+/** Tools whose transcripts let us identify a human turn. Claude Code is the
+ *  only one today. Adding another parser's support is a one-line change here.
+ *
+ *  This is a FILTER, not a caption: the decomposition is computed over these
+ *  tools only. 11 of 81 active days in the corpus mix tools, and on three of
+ *  them Codex is ~70% of the day's calls — summing those requests against
+ *  Claude-only turns would inflate Requests/Turn by up to 3x on exactly the
+ *  days a comparison might land. */
+export const TURN_CAPABLE_TOOLS = new Set(['claude']);
+
 // Per-model context windows, used only to flag impossible per-call context —
 // a delta-accounting regression shows up here immediately. Prefix-matched, and
 // a model matching nothing is SKIPPED rather than guessed: a wrong window would
@@ -258,6 +268,22 @@ export function normalize(sessions, projects) {
     }),
     { cost: 0, tokens: 0, sessions: 0 }
   );
+
+  // Turn capability is a filter: the share of cost carried by tools whose
+  // turns we can count, so later tasks can compute turn-based factors over
+  // that subset only and report what got excluded rather than hiding it.
+  const turnCoverage = normalized.reduce(
+    (acc, s) => {
+      if (TURN_CAPABLE_TOOLS.has(s.tool)) acc.cost += s.cost;
+      else acc.excludedCost += s.cost;
+      return acc;
+    },
+    { cost: 0, excludedCost: 0 }
+  );
+  turnCoverage.share = (turnCoverage.cost + turnCoverage.excludedCost)
+    ? turnCoverage.cost / (turnCoverage.cost + turnCoverage.excludedCost)
+    : 0;
+  totals.turnCoverage = turnCoverage;
 
   return { normalized, totals, unpricedModels, unknownModelSessions, overWindowSessions, callsByTool };
 }
