@@ -1,0 +1,105 @@
+import { describe, it, expect } from 'vitest';
+import { evaluate } from '../src/lib/intervention.js';
+
+const row = (d, calls, tokens, cost, turns) => [d, calls, tokens, 0, 0, 0, cost, 0, 0, 0, turns];
+const days = (from, n, fn) => {
+  const out = [];
+  const t = Date.parse(from + 'T00:00:00Z');
+  for (let i = 0; i < n; i++) out.push(fn(new Date(t + i * 86400000).toISOString().slice(0, 10), i));
+  return out;
+};
+const claude = (id, rows, extra = {}) => ({ id, tool: 'claude', daily: rows, ...extra });
+
+// 14 days before and 14 after, with tokens/request halving at the boundary.
+const corpus = () => [claude('a', [
+  ...days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)),
+  ...days('2026-07-16', 14, d => row(d, 10, 10000, 4, 2)),
+])];
+
+const iv = { date: '2026-07-15', label: 'test', expect: 'tokensPerRequest', expectedShift: [] };
+const today = '2026-08-20';
+
+describe('evaluate', () => {
+  it('supports a real improvement in the declared factor', () => {
+    const r = evaluate(corpus(), iv, { today });
+    expect(r.verdict).toBe('supported');
+    expect(r.before.tokensPerRequest).toBe(2000);
+    expect(r.after.tokensPerRequest).toBe(1000);
+  });
+
+  it('refuses when the before-window predates coverage', () => {
+    const sessions = [claude('a', days('2026-07-10', 24, d => row(d, 10, 20000, 8, 2)))];
+    const r = evaluate(sessions, iv, { today });
+    expect(r.verdict).toBe('refused');
+    expect(r.reasons.join(' ')).toMatch(/coverage/i);
+  });
+
+  it('refuses with an accurate reason when a side has calls but no turns', () => {
+    // Subagent-only activity: real calls, real cost, zero user turns.
+    const sessions = [claude('a', [
+      ...days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)),
+      ...days('2026-07-16', 14, d => row(d, 10, 10000, 4, 0)),
+    ])];
+    const r = evaluate(sessions, iv, { today });
+    expect(r.verdict).toBe('refused');
+    expect(r.reasons.join(' ')).toMatch(/no usable denominator/i);
+    expect(r.reasons.join(' ')).not.toMatch(/no active days/i);
+  });
+
+  it('refuses when either side has zero active days', () => {
+    const sessions = [claude('a', days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)))];
+    const r = evaluate(sessions, iv, { today });
+    expect(r.verdict).toBe('refused');
+    expect(r.reasons.join(' ')).toMatch(/no active days/i);
+  });
+
+  it('reports pending for a future intervention date', () => {
+    const r = evaluate(corpus(), { ...iv, date: '2026-12-01' }, { today });
+    expect(r.verdict).toBe('pending');
+  });
+
+  it('reports provisional while the after-window is still elapsing', () => {
+    const r = evaluate(corpus(), iv, { today: '2026-07-20' });
+    expect(r.verdict).toBe('provisional');
+  });
+
+  it('labels underpowered when active days fall below the minimum', () => {
+    const sessions = [claude('a', [
+      ...days('2026-07-01', 14, (d, i) => row(d, i < 2 ? 10 : 0, i < 2 ? 20000 : 0, i < 2 ? 8 : 0, i < 2 ? 2 : 0)),
+      ...days('2026-07-16', 14, (d, i) => row(d, i < 2 ? 10 : 0, i < 2 ? 10000 : 0, i < 2 ? 4 : 0, i < 2 ? 2 : 0)),
+    ])];
+    expect(evaluate(sessions, iv, { today }).verdict).toBe('underpowered');
+  });
+
+  it('flags a model-mix shift as a confound', () => {
+    const sessions = [
+      claude('a', days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)), { model: 'claude-opus-5' }),
+      claude('b', days('2026-07-16', 14, d => row(d, 10, 10000, 4, 2)), { model: 'claude-sonnet-5' }),
+    ];
+    const r = evaluate(sessions, iv, { today });
+    expect(r.verdict).toBe('confounded');
+    expect(r.confounds.some(c => c.dimension === 'model')).toBe(true);
+  });
+
+  it('does not flag a pre-registered expected shift', () => {
+    const sessions = [
+      claude('a', days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)), { model: 'claude-opus-5' }),
+      claude('b', days('2026-07-16', 14, d => row(d, 10, 10000, 4, 2)), { model: 'claude-sonnet-5' }),
+    ];
+    const r = evaluate(sessions, { ...iv, expectedShift: ['model'] }, { today });
+    expect(r.verdict).toBe('supported');
+    expect(r.confounds.some(c => c.dimension === 'model' && c.expected)).toBe(true);
+  });
+
+  it('lists an overlapping intervention as a confound', () => {
+    const r = evaluate(corpus(), iv, {
+      today,
+      others: [{ date: '2026-07-20', label: 'another change' }],
+    });
+    expect(r.confounds.some(c => c.dimension === 'intervention')).toBe(true);
+  });
+
+  it('rejects a window length that is not a multiple of 7', () => {
+    expect(() => evaluate(corpus(), iv, { today, windowDays: 10 })).toThrow(/multiple of 7/);
+  });
+});
