@@ -1397,6 +1397,18 @@ describe('evaluate', () => {
     expect(r.reasons.join(' ')).toMatch(/coverage/i);
   });
 
+  it('refuses with an accurate reason when a side has calls but no turns', () => {
+    // Subagent-only activity: real calls, real cost, zero user turns.
+    const sessions = [claude('a', [
+      ...days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)),
+      ...days('2026-07-16', 14, d => row(d, 10, 10000, 4, 0)),
+    ])];
+    const r = evaluate(sessions, iv, { today });
+    expect(r.verdict).toBe('refused');
+    expect(r.reasons.join(' ')).toMatch(/no usable denominator/i);
+    expect(r.reasons.join(' ')).not.toMatch(/no active days/i);
+  });
+
   it('refuses when either side has zero active days', () => {
     const sessions = [claude('a', days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)))];
     const r = evaluate(sessions, iv, { today });
@@ -1574,6 +1586,19 @@ export function evaluate(sessions, intervention, options = {}) {
   if (!before || !after) {
     reasons.push('One side of the comparison has no active days, so there is nothing to compare.');
     return { ...base, verdict: 'refused' };
+  }
+  // A window can have real calls and real cost yet no recorded user turn —
+  // subagent-only activity does exactly that, and it occurs on 1 of 79 Claude
+  // days in the reference corpus (2026-06-16: 40 calls, $19.43). `factorsFor`
+  // reports that as `degenerate` rather than null precisely so this message can
+  // be accurate; saying "no active days" about a day with 40 calls on it is the
+  // same class of false statement the coverage guard exists to prevent.
+  if (before.degenerate || after.degenerate) {
+    reasons.push(
+      `One side has activity but no usable denominator (${before.degenerate || after.degenerate}), ` +
+      `so the per-turn factors cannot be computed for it.`
+    );
+    return { ...base, before, after, verdict: 'refused' };
   }
 
   const confounds = [
