@@ -3,3 +3,5 @@ dist/
 .superpowers/
 packages/dashboard/public/tokens.json
 dashboard/public/tokens.json
+interventions.json
+interventions.results.json

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { discoverProjects } from './discovery.js';
 import { normalize } from './normalizer.js';
+import { readInterventions } from './interventions.js';
 import { parseClaudeJSON } from './parsers/claude.js';
 import { parseOpencodeSessions } from './parsers/opencode.js';
 import { parseCodexData, defaultPath as codexPath } from './parsers/codex.js';
@@ -44,6 +45,10 @@ function ingest() {
   const { normalized, totals, unpricedModels, unknownModelSessions, overWindowSessions, callsByTool } =
     normalize(sessions, projects);
 
+  const { entries: interventions, warnings: interventionWarnings } =
+    readInterventions(path.resolve(__dirname, '..', '..', '..', 'interventions.json'));
+  for (const w of interventionWarnings) console.error(`WARNING: ${w}`);
+
   for (const [model, { sessions: n, tokens }] of Object.entries(unpricedModels)) {
     console.error(
       `WARNING: no pricing entry for "${model}" — ${n} session(s), ` +
@@ -78,6 +83,7 @@ function ingest() {
     tools: [...new Set(normalized.map(s => s.tool))],
     sessions: normalized,
     totals,
+    interventions,
   };
 
   const outDir = path.dirname(outputPath);
