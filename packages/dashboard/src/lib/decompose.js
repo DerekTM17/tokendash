@@ -17,7 +17,21 @@
  */
 import { FACTOR_KEYS } from './factors.js';
 
-/** Disagreement threshold, as a share of the total change. */
+/**
+ * Disagreement threshold, as a share of the largest contribution actually
+ * shown to a reader for this call. Two scales were tried and rejected first:
+ *   - the total change (|after.cost - before.cost|) collapses toward zero
+ *     when the five factors swing in opposite directions and mostly cancel,
+ *     so a genuinely ordinary change gets divided by a near-zero number and
+ *     falsely flagged as order-sensitive.
+ *   - spend level (max of before.cost/after.cost) dilutes the other way: it
+ *     normalizes by how much money is in play rather than by how large the
+ *     factor swings are, so a real order-dependence problem inside a
+ *     big-spend period reads as a small percentage and stays quiet — a false
+ *     negative on a flag whose only job is to say "don't trust this split."
+ * max|contribution| is the size of the numbers actually placed in front of a
+ * reader, which is what "is this split trustworthy" is really asking about.
+ */
 const DISAGREEMENT = 0.10;
 
 function sequential(before, after) {
@@ -56,12 +70,9 @@ export function decompose(before, after) {
   let orderSensitive = false;
   if (!oracleSkipped) {
     const other = lmdi(before, after);
-    // Scaled against cost magnitude, not the delta: when factors swing in
-    // opposite directions the total change can shrink toward zero even though
-    // each factor moved a lot, and dividing by that near-zero delta would flag
-    // ordinary changes as order-sensitive. Cost magnitude stays stable through
-    // that cancellation.
-    const scale = Math.max(Math.abs(before.cost), Math.abs(after.cost), 1e-9);
+    // See the DISAGREEMENT comment above for why max|contribution| — not
+    // |total| and not spend level — is the right scale here.
+    const scale = Math.max(...FACTOR_KEYS.map(k => Math.abs(contributions[k])), 1e-9);
     orderSensitive = FACTOR_KEYS.some(k => {
       const gap = Math.abs(contributions[k] - other[k]) / scale;
       const signFlip = Math.sign(contributions[k]) !== Math.sign(other[k])

@@ -45,4 +45,33 @@ describe('decompose', () => {
     expect(oracleSkipped).toBe(true);
     expect(orderSensitive).toBe(false);
   });
+
+  // The sum-to-delta tests above only catch a broken SUM, never a broken
+  // MAPPING: if a future edit swapped which telescoping term lands on which
+  // FACTOR_KEYS[i], every assertion above would still pass because the terms
+  // still add up. Changing exactly one factor and leaving the rest identical
+  // pins the mapping instead: that factor must carry the whole delta and the
+  // other four must be exactly zero. Checked at both ends of FACTOR_KEYS so a
+  // reordering couldn't pass by symmetry.
+  it('attributes the entire delta to activeDays when only activeDays changes', () => {
+    const before = f(10, 5, 8, 20000, 4e-6);
+    const after = f(15, 5, 8, 20000, 4e-6);
+    const { contributions } = decompose(before, after);
+    expect(contributions.activeDays).toBeCloseTo(after.cost - before.cost, 8);
+    expect(contributions.turnsPerActiveDay).toBe(0);
+    expect(contributions.requestsPerTurn).toBe(0);
+    expect(contributions.tokensPerRequest).toBe(0);
+    expect(contributions.pricePerToken).toBe(0);
+  });
+
+  it('attributes the entire delta to pricePerToken when only pricePerToken changes', () => {
+    const before = f(10, 5, 8, 20000, 4e-6);
+    const after = f(10, 5, 8, 20000, 3e-6);
+    const { contributions } = decompose(before, after);
+    expect(contributions.pricePerToken).toBeCloseTo(after.cost - before.cost, 8);
+    expect(contributions.activeDays).toBe(0);
+    expect(contributions.turnsPerActiveDay).toBe(0);
+    expect(contributions.requestsPerTurn).toBe(0);
+    expect(contributions.tokensPerRequest).toBe(0);
+  });
 });
