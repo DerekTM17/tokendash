@@ -2324,7 +2324,7 @@ git commit -m "docs: document driver decomposition and interventions"
 
 **Two spec items deliberately deferred, both recorded in Task 15 rather than dropped:**
 - The `history.jsonl` deletion detector — a genuine improvement to the coverage guard, but it introduces a new data source and the `coverageWindow` floor is sufficient to close the blocker.
-- Variance display (daily series with n, mean, median) is computed in `factorsFor` but not yet rendered per-window in `InterventionPanel`. Add it there if the panel reads thin in use; the guard logic does not depend on it.
+- Variance display (spec guard 5: the daily series for both sides with n, mean and median) is **NOT COMPUTED ANYWHERE**. This line previously claimed it "is computed in `factorsFor` but not yet rendered", which was simply false — `factorsFor` returns activeDays/cost/turns/requests/tokens and no distribution at all — and the deferral it described was never recorded in BACKLOG either. Corrected 2026-09-04 after the whole-branch review; the guard is now a real BACKLOG item. A false claim about what was built is worse than the omission it covers.
 
 **Placeholder scan.** No TBDs, no "add error handling", no "similar to Task N". Every code step carries real code.
 
