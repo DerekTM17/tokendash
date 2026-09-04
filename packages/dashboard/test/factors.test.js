@@ -54,11 +54,32 @@ describe('factorsFor', () => {
       '2026-08-01', '2026-08-14')).toBeNull();
   });
 
-  it('does not count a zero-call day as active', () => {
+  it('does not count a zero-call day as active, but a turn there still counts toward turns', () => {
     const sessions = [claude('a', [
       row('2026-07-01', 0, 0, 0, 1),
       row('2026-07-02', 2, 1000, 10, 1),
     ])];
-    expect(factorsFor(sessions, '2026-07-01', '2026-07-02').activeDays).toBe(1);
+    const f = factorsFor(sessions, '2026-07-01', '2026-07-02');
+    expect(f.activeDays).toBe(1);
+    // A turn recorded on a zero-call day (a prompt at 23:59 answered after
+    // midnight) still lands in the turns numerator, even though its day
+    // doesn't count as active — turns and activeDays are independent tallies.
+    expect(f.turns).toBe(2);
+    expect(f.turnsPerActiveDay).toBe(2);
+  });
+
+  it('reports a day with calls but no turns as degenerate rather than dropping it', () => {
+    // Mirrors the real corpus: 2026-06-16 has 40 Claude calls and $19.43 of
+    // cost but 0 turns, because a subagent session carries calls and never
+    // carries turns. That day must not vanish behind a null.
+    const sessions = [claude('a', [row('2026-07-01', 40, 500000, 19.43, 0)])];
+    const f = factorsFor(sessions, '2026-07-01', '2026-07-01');
+
+    expect(f).not.toBeNull();
+    expect(f.activeDays).toBe(1);
+    expect(f.degenerate).toBe('no-turns');
+    expect(f.turnsPerActiveDay).toBe(0);
+    expect(f.requestsPerTurn).toBeNull();
+    expect(f.cost).toBeCloseTo(19.43, 8);
   });
 });
