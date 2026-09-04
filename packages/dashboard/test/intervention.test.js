@@ -67,8 +67,54 @@ describe('evaluate', () => {
   });
 
   it('reports provisional while the after-window is still elapsing', () => {
-    const r = evaluate(corpus(), iv, { today: '2026-07-20' });
+    // A shape reality can produce: the after-window runs 07-16..07-29, five of
+    // its days have elapsed, and the corpus stops the day before `today`. The
+    // old fixture passed this assertion only because it carried data for days
+    // AFTER today — a corpus that cannot exist — which meant the realistic
+    // mid-flight shape (thin so far, still running) was never exercised.
+    const midFlight = [claude('a', [
+      ...days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)),
+      ...days('2026-07-16', 5, d => row(d, 10, 10000, 4, 2)),
+    ])];
+    const r = evaluate(midFlight, iv, { today: '2026-07-21' });
     expect(r.verdict).toBe('provisional');
+    expect(r.after.activeDays).toBe(5);
+    expect(r.reasons.join(' ')).toMatch(/9 day\(s\) left/);
+    expect(r.reasons.join(' ')).toMatch(/not a final result/i);
+  });
+
+  it('says a mid-flight window is unfinished AND thin, not merely thin', () => {
+    // Four of the fourteen after-days elapsed. The reader must be told the
+    // window is not FINISHED — "underpowered / watch it accumulate" says only
+    // that it is thin, which reads as a settled answer about a settled window.
+    const midFlight = [claude('a', [
+      ...days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)),
+      ...days('2026-07-16', 4, d => row(d, 10, 10000, 4, 2)),
+    ])];
+    const r = evaluate(midFlight, iv, { today: '2026-07-20' });
+    expect(r.verdict).toBe('provisional');
+    expect(r.reasons.join(' ')).toMatch(/10 day\(s\) left/);
+    expect(r.reasons.join(' ')).toMatch(/below the 5-day minimum/);
+  });
+
+  it('refuses to call a verdict final on the day the after-window ends', () => {
+    // The spec's reproducibility rule: the after-window ends STRICTLY before
+    // today, so the last day is not still accumulating while being measured. On
+    // 07-29 that day holds 1 call of the ~10 every other day carries, and the
+    // figure it produces (995.42, not the 1000 the finished window will show)
+    // is one the old `>` was willing to call final — and a final verdict is
+    // freezable into the permanent sidecar.
+    const partialLastDay = [claude('a', [
+      ...days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)),
+      ...days('2026-07-16', 13, d => row(d, 10, 10000, 4, 2)),
+      row('2026-07-29', 1, 400, 0.16, 1),
+    ])];
+
+    const onTheDay = evaluate(partialLastDay, iv, { today: '2026-07-29' });
+    expect(onTheDay.verdict).toBe('provisional');
+    expect(onTheDay.after.tokensPerRequest).toBeCloseTo(995.42, 2);
+    // One day later the window has closed and the verdict is final.
+    expect(evaluate(partialLastDay, iv, { today: '2026-07-30' }).verdict).toBe('supported');
   });
 
   it('labels underpowered when active days fall below the minimum', () => {

@@ -169,27 +169,46 @@ export function evaluate(sessions, intervention, options = {}) {
   const { contributions, total, orderSensitive, oracleSkipped } = decompose(before, after);
   const result = { ...base, before, after, contributions, total, confounds, orderSensitive, oracleSkipped };
 
-  if (before.activeDays < opts.minActiveDays || after.activeDays < opts.minActiveDays) {
+  const thin = before.activeDays < opts.minActiveDays || after.activeDays < opts.minActiveDays;
+  const thinReason =
+    `Only ${before.activeDays} active days before and ${after.activeDays} after, ` +
+    `below the ${opts.minActiveDays}-day minimum.`;
+  const unexpected = confounds.filter(c => !c.expected);
+  const confoundReason = `Something other than the intervention moved: ` +
+    unexpected.map(c => `${c.dimension}/${c.category}`).join(', ') + '.';
+
+  // Guard 2 (Maturity) is settled BEFORE power and confounds, because "this is
+  // not finished" outranks every qualifier that could be applied to a finished
+  // comparison. A mid-flight window used to fall into the power guard first and
+  // come back `underpowered` — "watch it accumulate", which tells a reader the
+  // window is THIN and never that it is still RUNNING — while `remaining` was
+  // computed on a branch that could not be reached from that shape at all.
+  //
+  // `>=`, not `>`, per the spec's reproducibility rule: the after-window ends
+  // strictly before today, so the final day is not still accumulating while
+  // being measured. A partial last day flatters the result — probed at
+  // afterTo === today with 1 call of an expected 10 on it, the old `>` returned
+  // a final `supported` and that verdict is freezable into the permanent
+  // sidecar.
+  if (windows.afterTo >= opts.today) {
+    const remaining = Math.round((Date.parse(windows.afterTo) - Date.parse(opts.today)) / DAY) + 1;
     reasons.push(
-      `Only ${before.activeDays} active days before and ${after.activeDays} after, ` +
-      `below the ${opts.minActiveDays}-day minimum. Watch it accumulate.`
+      `The after-window runs to ${windows.afterTo} and has ${remaining} day(s) left, ` +
+      `counting today. This is not a final result.`
     );
+    if (thin) reasons.push(`${thinReason} Watch it accumulate.`);
+    if (unexpected.length) reasons.push(confoundReason);
+    return { ...result, verdict: 'provisional' };
+  }
+
+  if (thin) {
+    reasons.push(`${thinReason} Watch it accumulate.`);
     return { ...result, verdict: 'underpowered' };
   }
 
-  const unexpected = confounds.filter(c => !c.expected);
   if (unexpected.length) {
-    reasons.push(
-      `Something other than the intervention moved: ` +
-      unexpected.map(c => `${c.dimension}/${c.category}`).join(', ') + '.'
-    );
+    reasons.push(confoundReason);
     return { ...result, verdict: 'confounded' };
-  }
-
-  if (windows.afterTo > opts.today) {
-    const remaining = Math.round((Date.parse(windows.afterTo) - Date.parse(opts.today)) / DAY);
-    reasons.push(`The after-window has ${remaining} day(s) left to run.`);
-    return { ...result, verdict: 'provisional' };
   }
 
   // `expect` names a factor AND a direction. Two of the five factors are levers
