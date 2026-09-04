@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import DriverDecomposition from '../src/components/DriverDecomposition.jsx';
+import DriverDecomposition, { TERMS } from '../src/components/DriverDecomposition.jsx';
+import { define } from '../src/lib/glossary.js';
 
 const row = (d, calls, tokens, cost, turns) => [d, calls, tokens, 0, 0, 0, cost, 0, 0, 0, turns];
 const days = (from, n, fn) => {
@@ -51,5 +52,32 @@ describe('DriverDecomposition', () => {
     expect(screen.getByText(/no turns/i)).toBeTruthy();
     expect(screen.queryByText(/nan/i)).toBe(null);
     expect(screen.queryByRole('table')).toBe(null);
+  });
+
+  it('formats every factor for a reader, never using exponential notation', () => {
+    // Deliberately realistic-scale values: pricePerToken lands around 9e-7 and
+    // tokensPerRequest around 1.8e5, the exact ranges that made toPrecision(4)
+    // render `9.097e-7` / `1.819e+5` against the real corpus (see the task
+    // report's real-data check). Both halves carry identical daily figures so
+    // the comparison itself stays uninteresting — this test is only about
+    // how the Before/After cells render.
+    const realistic = [{ id: 'a', tool: 'claude', daily: [
+      ...days('2026-07-01', 14, d => row(d, 600, 108_000_000, 97.2, 20)),
+      ...days('2026-07-16', 14, d => row(d, 600, 108_000_000, 97.2, 20)),
+    ] }];
+    const { container } = render(<DriverDecomposition sessions={realistic} delay={0} />);
+    expect(container.textContent).not.toMatch(/\de[+-]\d/i);
+    // And the scaled price-per-token figure should read as a dollar amount
+    // per million tokens, not a bare per-token fraction.
+    expect(screen.getAllByText(/\/ 1M/).length).toBeGreaterThan(0);
+  });
+
+  it('names every factor term the panel actually asks the glossary for', () => {
+    // The repo-wide glossary.test.js only scans components/ for literal
+    // `term="..."` strings; `TERMS[k]` is a dynamic expression it cannot see.
+    // This colocated assertion is the real typo guard for these five terms.
+    for (const [key, term] of Object.entries(TERMS)) {
+      expect(define(term), `TERMS.${key} = "${term}" has no glossary entry`).not.toBeNull();
+    }
   });
 });

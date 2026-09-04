@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { factorsFor, FACTOR_KEYS } from '../lib/factors.js';
 import { decompose } from '../lib/decompose.js';
-import { formatCost } from '../lib/format.js';
+import { formatCost, formatTokens } from '../lib/format.js';
 import InfoTip from './InfoTip.jsx';
 
 const LABELS = {
@@ -11,13 +11,34 @@ const LABELS = {
   tokensPerRequest: 'Tokens per request',
   pricePerToken: 'Price per token',
 };
-const TERMS = {
+export const TERMS = {
   activeDays: 'active days',
   turnsPerActiveDay: 'turns per active day',
   requestsPerTurn: 'requests per turn',
   tokensPerRequest: 'tokens per request',
   pricePerToken: 'price per token',
 };
+
+/**
+ * Renders a factor's Before/After value the way a reader who has never seen a
+ * token bill would want to see it — not `toPrecision(4)`, which puts
+ * `pricePerToken` (routinely ~1e-6) and `tokensPerRequest` (routinely ~1e5) in
+ * exponential notation that communicates nothing.
+ *
+ * `pricePerToken` is scaled by 1,000,000 and shown as a dollar figure per
+ * million tokens — the same idiom `ModelEfficiency` uses for per-token rates —
+ * with an explicit "/ 1M" suffix so it is never mistaken for a per-token price.
+ */
+function formatFactorValue(key, value) {
+  switch (key) {
+    case 'activeDays': return String(Math.round(value));
+    case 'turnsPerActiveDay': return value.toFixed(1);
+    case 'requestsPerTurn': return value.toFixed(1);
+    case 'tokensPerRequest': return formatTokens(value);
+    case 'pricePerToken': return `${formatCost(value * 1e6)} / 1M`;
+    default: return String(value);
+  }
+}
 
 /** Split the covered span in half and compare the halves. */
 function halves(sessions) {
@@ -113,8 +134,8 @@ export default function DriverDecomposition({ sessions, delay = 0 }) {
                     <td style={{ fontFamily: 'var(--f-body)', fontSize: 13, color: 'var(--color-text)', padding: '9px 0' }}>
                       {LABELS[k]}<InfoTip term={TERMS[k]} />
                     </td>
-                    <td className="mono" style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)', padding: '9px 0' }}>{result.before[k].toPrecision(4)}</td>
-                    <td className="mono" style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)', padding: '9px 0' }}>{result.after[k].toPrecision(4)}</td>
+                    <td className="mono" style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)', padding: '9px 0' }}>{formatFactorValue(k, result.before[k])}</td>
+                    <td className="mono" style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)', padding: '9px 0' }}>{formatFactorValue(k, result.after[k])}</td>
                     <td className="mono" style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: result.contributions[k] >= 0 ? 'var(--color-cost)' : 'var(--mint)', padding: '9px 0' }}>
                       {formatCost(result.contributions[k])}
                     </td>
