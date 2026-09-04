@@ -451,9 +451,14 @@ side.
    (`BACKLOG:29`) will drop subagent cost share by more than 10 points *by
    design*, and flagging that as a confound would mark every successful
    intervention `confounded`. `interventions.json` therefore accepts an optional
-   `expectedShift` naming categories exempt from the confound verdict. Exempt
-   shifts are still listed, so nothing is hidden — they simply do not invalidate
-   the result. Declaring one is subject to the same pre-registration discipline
+   `expectedShift` naming categories exempt from the confound verdict. A category
+   is named either qualified (`"model/claude-sonnet-5"`) or bare
+   (`"claude-sonnet-5"`); a bare `"subagent"` works because in that one
+   dimension the dimension name and the category name coincide. **It is a
+   category, never a dimension** — `["model"]` must not exempt every model
+   shift, or an unannounced switch to a third model rides in on a declaration
+   that never mentioned it. Exempt shifts are still listed, so nothing is
+   hidden — they simply do not invalidate the result. Declaring one is subject to the same pre-registration discipline
    as `expect`: it is a prediction, not a post-hoc excuse.
 
    **Other interventions inside either window are themselves a confound.** Two

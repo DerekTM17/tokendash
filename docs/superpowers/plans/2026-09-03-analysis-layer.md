@@ -1534,6 +1534,11 @@ function tokenTypeShares(sessions, from, to) {
   return out;
 }
 
+// CORRECTION (2026-09-04, whole-branch review): `expectedShift.includes(dimension)`
+// below is a PLAN DEFECT, not implementer drift. The spec exempts CATEGORIES;
+// this exempts a whole dimension, so `expectedShift: ['model']` would launder an
+// unannounced switch to a third model the user never predicted. The shipped code
+// matches on category — see `isPreRegistered` in intervention.js.
 function compareShares(before, after, dimension, threshold, expectedShift) {
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   const found = [];

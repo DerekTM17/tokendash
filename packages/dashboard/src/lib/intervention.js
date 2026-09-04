@@ -5,7 +5,7 @@
  * survives a skeptic, so this module is mostly guards: a comparison that cannot
  * be trusted is refused rather than qualified.
  */
-import { factorsFor } from './factors.js';
+import { factorsFor, TURN_CAPABLE } from './factors.js';
 import { decompose } from './decompose.js';
 import { firstCoveredDay } from './coverage.js';
 
@@ -15,16 +15,33 @@ const shift = (day, n) => new Date(Date.parse(day + 'T00:00:00Z') + n * DAY)
 
 const DEFAULTS = { windowDays: 14, minActiveDays: 5, confoundThreshold: 0.10 };
 
-/** Cost share by category, over a day window, for one dimension. */
+/** The category a session falls into, per confound dimension. A lookup rather
+ *  than a ternary chain so there is no unreachable fallback arm: exactly these
+ *  three dimensions are ever passed, and a fourth would now throw at its call
+ *  site rather than quietly bucket everything under one made-up category. */
+const CATEGORY_OF = {
+  model: s => s.model || 'unknown',
+  project: s => s.project || 'other',
+  subagent: s => (s.isSubagent ? 'subagent' : 'main'),
+};
+
+/**
+ * Cost share by category, over a day window, for one dimension.
+ *
+ * Scoped to turn-capable tools, matching `factorsFor`. Spanning every tool made
+ * this a producer/consumer contract drift inside one module: confound detection
+ * ran over a cost base the decomposition never touched, so a project- or
+ * token-type-mix swing driven entirely by Codex could flag `confounded` on a
+ * comparison in which no Codex cost participated.
+ */
 function shares(sessions, from, to, dimension) {
+  const categoryOf = CATEGORY_OF[dimension];
+  if (!categoryOf) throw new Error(`unknown confound dimension: ${dimension}`);
   const out = {};
   let total = 0;
   for (const s of sessions) {
-    if (!s.daily?.length) continue;
-    const key = dimension === 'model' ? (s.model || 'unknown')
-      : dimension === 'project' ? (s.project || 'other')
-      : dimension === 'subagent' ? (s.isSubagent ? 'subagent' : 'main')
-      : 'other';
+    if (!s.daily?.length || !TURN_CAPABLE.has(s.tool)) continue;
+    const key = categoryOf(s);
     for (const [day, , , , , , cI, cO, cR, cW] of s.daily) {
       if (day < from || day > to) continue;
       const c = cI + cO + cR + cW;
@@ -39,12 +56,13 @@ function shares(sessions, from, to, dimension) {
 /** Token-type cost share. The blended Price/Token moves whenever the
  *  cacheRead:input mix moves, so a cache-TTL change registers there as well as
  *  in Tokens/Request. Without this dimension the panel would credit a mix
- *  change to model selection. */
+ *  change to model selection. Scoped to turn-capable tools for the same reason
+ *  `shares` is. */
 function tokenTypeShares(sessions, from, to) {
   const out = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   let total = 0;
   for (const s of sessions) {
-    if (!s.daily?.length) continue;
+    if (!s.daily?.length || !TURN_CAPABLE.has(s.tool)) continue;
     for (const [day, , , , , , cI, cO, cR, cW] of s.daily) {
       if (day < from || day > to) continue;
       out.input += cI; out.output += cO; out.cacheRead += cR; out.cacheWrite += cW;
@@ -55,6 +73,22 @@ function tokenTypeShares(sessions, from, to) {
   return out;
 }
 
+/**
+ * Was this specific shift pre-registered?
+ *
+ * The spec exempts CATEGORIES, not dimensions: `expectedShift: ['model']` used
+ * to exempt every model shift, including an unexpected switch to a third model
+ * the user never predicted — which is exactly the post-hoc excuse
+ * pre-registration exists to rule out. A declaration names the category, either
+ * qualified (`"model/claude-sonnet-5"`) or bare (`"claude-sonnet-5"`). A bare
+ * `"subagent"` still works because there the dimension and the category happen
+ * to be the same word; that is a coincidence, not a dimension-wide exemption.
+ */
+function isPreRegistered(expectedShift, dimension, category) {
+  return expectedShift.includes(`${dimension}/${category}`)
+    || expectedShift.includes(category);
+}
+
 function compareShares(before, after, dimension, threshold, expectedShift) {
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   const found = [];
@@ -63,7 +97,7 @@ function compareShares(before, after, dimension, threshold, expectedShift) {
     if (Math.abs(delta) > threshold) {
       found.push({
         dimension, category: k, delta,
-        expected: expectedShift.includes(dimension),
+        expected: isPreRegistered(expectedShift, dimension, k),
       });
     }
   }
@@ -157,7 +191,12 @@ export function evaluate(sessions, intervention, options = {}) {
   ];
 
   for (const other of opts.others || []) {
-    if (other.date === date) continue;
+    // Skip THIS intervention, by identity — not by date. Skipping every entry
+    // sharing the date dropped the strongest confound there is: a second,
+    // unrelated change made on the same day, which used to yield a clean
+    // `supported`. `date + label` is the same key the frozen-results sidecar
+    // uses to identify an intervention.
+    if (other.date === date && other.label === intervention.label) continue;
     if (other.date >= windows.beforeFrom && other.date <= windows.afterTo) {
       confounds.push({
         dimension: 'intervention', category: other.label,

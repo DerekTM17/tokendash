@@ -95,8 +95,12 @@ change before it happens: copy `interventions.example.json` to
 `interventions.json` at the repo root and write down the date, a label, the
 one factor you expect it to move, and which way you expect it to move
 (`"direction": "down"` or `"up"`; omit it and `down` is assumed).
-`interventions.json` is gitignored and never leaves your machine. Declaring
-`expect` and `direction` before looking at the result is the whole mechanism —
+If the change is *meant* to move one of the mixes the confound check watches,
+pre-register it in `expectedShift` by naming the category —
+`["model/claude-sonnet-5"]`, not `["model"]`, so an unannounced switch to some
+third model is still flagged. `interventions.json` is gitignored and never
+leaves your machine. Declaring `expect` and `direction` before looking at the
+result is the whole mechanism —
 with five factors and two directions there are ten ways to find a flattering
 number after the fact, and a factor picked once you have already seen the
 outcome proves nothing. Two of the five factors are levers you normally want to

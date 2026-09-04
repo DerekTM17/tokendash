@@ -29,8 +29,13 @@
  */
 
 /** Mirrors ingest's TURN_CAPABLE_TOOLS. The dashboard reads tokens.json and
- *  does not import from the ingest package, so the list is restated here. */
-const TURN_CAPABLE = new Set(['claude']);
+ *  does not import from the ingest package, so the list is restated here.
+ *
+ *  Exported because it is a contract, not an implementation detail: anything
+ *  computed alongside `factorsFor` — the confound shares in `intervention.js`,
+ *  the half-split in `DriverDecomposition` — has to scope itself to the same
+ *  population, or it describes a cost base the decomposition never touched. */
+export const TURN_CAPABLE = new Set(['claude']);
 
 /** Multiplication order matters for sequential attribution, so it is fixed. */
 export const FACTOR_KEYS = [

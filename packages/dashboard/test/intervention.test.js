@@ -136,13 +136,67 @@ describe('evaluate', () => {
   });
 
   it('does not flag a pre-registered expected shift', () => {
+    // Pre-registration names CATEGORIES: "opus share will fall, sonnet share
+    // will rise". Both sides of the swap have to be declared, because both are
+    // shifts the reader will see listed.
     const sessions = [
       claude('a', days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)), { model: 'claude-opus-5' }),
       claude('b', days('2026-07-16', 14, d => row(d, 10, 10000, 4, 2)), { model: 'claude-sonnet-5' }),
     ];
-    const r = evaluate(sessions, { ...iv, expectedShift: ['model'] }, { today });
+    const declared = { ...iv, expectedShift: ['model/claude-opus-5', 'model/claude-sonnet-5'] };
+    const r = evaluate(sessions, declared, { today });
     expect(r.verdict).toBe('supported');
     expect(r.confounds.some(c => c.dimension === 'model' && c.expected)).toBe(true);
+    expect(r.confounds.every(c => c.expected)).toBe(true);
+  });
+
+  it('does not exempt a third model the declaration never named', () => {
+    // The whole point of naming the shift in advance. Declaring the opus ->
+    // sonnet swap must not launder an unannounced switch to a third model; a
+    // dimension-wide `['model']` exemption was exactly the post-hoc excuse
+    // pre-registration exists to rule out.
+    const sessions = [
+      claude('a', days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)), { model: 'claude-opus-5' }),
+      claude('b', days('2026-07-16', 14, d => row(d, 10, 6000, 2, 2)), { model: 'claude-sonnet-5' }),
+      claude('c', days('2026-07-16', 14, d => row(d, 10, 4000, 2, 2)), { model: 'claude-haiku-5' }),
+    ];
+    const declared = { ...iv, expectedShift: ['model/claude-opus-5', 'model/claude-sonnet-5'] };
+    const r = evaluate(sessions, declared, { today });
+    expect(r.verdict).toBe('confounded');
+    const haiku = r.confounds.find(c => c.dimension === 'model' && c.category === 'claude-haiku-5');
+    expect(haiku).toBeTruthy();
+    expect(haiku.expected).toBe(false);
+    // ...while the two categories that WERE declared stay exempt.
+    expect(r.confounds.filter(c => c.category.startsWith('claude-opus') || c.category.startsWith('claude-sonnet'))
+      .every(c => c.expected)).toBe(true);
+  });
+
+  it('accepts a bare category name, which is why "subagent" still works', () => {
+    // `subagent` is the one dimension whose name and category coincide, so a
+    // declaration written as `['subagent']` keeps working — by naming the
+    // category, not by exempting the dimension.
+    const sessions = [
+      claude('a', days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2))),
+      claude('b', days('2026-07-16', 14, d => row(d, 10, 10000, 4, 2)), { isSubagent: true }),
+    ];
+    const r = evaluate(sessions, { ...iv, expectedShift: ['subagent', 'main'] }, { today });
+    expect(r.confounds.filter(c => c.dimension === 'subagent').every(c => c.expected)).toBe(true);
+  });
+
+  it('ignores a mix shift that no turn-capable tool participated in', () => {
+    // Confound shares must run over the same population `factorsFor` does.
+    // Codex cost is excluded from the decomposition entirely, so a project mix
+    // swing driven only by Codex describes a cost base this comparison never
+    // touched — and used to flag it `confounded`.
+    const sessions = [
+      claude('a', days('2026-07-01', 14, d => row(d, 10, 20000, 8, 2)), { project: 'alpha' }),
+      claude('b', days('2026-07-16', 14, d => row(d, 10, 10000, 4, 2)), { project: 'alpha' }),
+      { id: 'x', tool: 'codex', project: 'beta',
+        daily: days('2026-07-16', 14, d => row(d, 10, 50000, 200, 0)) },
+    ];
+    const r = evaluate(sessions, iv, { today });
+    expect(r.confounds.filter(c => c.dimension === 'project')).toEqual([]);
+    expect(r.verdict).toBe('supported');
   });
 
   it('flags a token-type mix shift as a confound', () => {
@@ -168,6 +222,21 @@ describe('evaluate', () => {
       others: [{ date: '2026-07-20', label: 'another change' }],
     });
     expect(r.confounds.some(c => c.dimension === 'intervention')).toBe(true);
+  });
+
+  it('counts a second intervention on the SAME DAY as a confound', () => {
+    // Self is skipped by identity, not by date. Two changes made on one day is
+    // the strongest confound there is, and it was the single case dropped —
+    // the comparison came back a clean `supported`.
+    const r = evaluate(corpus(), iv, {
+      today,
+      others: [iv, { date: iv.date, label: 'a totally different change' }],
+    });
+    const clash = r.confounds.find(c => c.dimension === 'intervention');
+    expect(clash).toBeTruthy();
+    expect(clash.category).toBe('a totally different change');
+    expect(r.confounds.filter(c => c.category === iv.label)).toEqual([]);
+    expect(r.verdict).toBe('confounded');
   });
 
   // An adoption/engagement intervention aims a factor UPWARD. The comparison
