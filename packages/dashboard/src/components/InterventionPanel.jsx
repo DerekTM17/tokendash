@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { evaluate } from '../lib/intervention.js';
 import { TERMS } from './DriverDecomposition.jsx';
 import InfoTip from './InfoTip.jsx';
+import AttributionNotes from './AttributionNotes.jsx';
 
 // Re-exported so `test/InterventionPanel.test.jsx` can assert every value this
 // panel dynamically hands to InfoTip (`term={TERMS[iv.expect]}` below) resolves
@@ -123,6 +124,11 @@ export default function InterventionPanel({ sessions, interventions = [], today,
                 <ul style={{ margin: '0 0 8px', paddingLeft: 18, fontFamily: 'var(--f-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   {(result.reasons ?? []).map((r, i) => <li key={i}>{r}</li>)}
                 </ul>
+
+                <AttributionNotes
+                  orderSensitive={result.orderSensitive}
+                  oracleSkipped={result.oracleSkipped}
+                />
 
                 {result.confounds?.length > 0 && (
                   <ul style={{ margin: 0, paddingLeft: 18, fontFamily: 'var(--f-body)', fontSize: 11.5, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>

@@ -76,6 +76,27 @@ describe('InterventionPanel', () => {
     expect(screen.getByText(/frozen 2026-10-01/i)).toBeTruthy();
   });
 
+  it('carries the attribution caveats the decomposition produced', () => {
+    // The panel decomposes exactly as DriverDecomposition does but rendered
+    // neither caveat, so an order-sensitive split and a sound one looked the
+    // same here — as did a skipped oracle and a passed one.
+    const violent = [{ id: 'a', tool: 'claude', daily: [
+      ...days('2026-07-01', 14, d => row(d, 1, 1000, 0.01, 1)),
+      ...days('2026-07-16', 14, d => row(d, 90, 900000, 90, 60)),
+    ] }];
+    render(<InterventionPanel sessions={violent} interventions={iv} today="2026-08-20" delay={0} />);
+    expect(screen.getByText(/differ too much for the attribution order/i)).toBeTruthy();
+  });
+
+  it('says when the order-independence check could not run at all', () => {
+    const freeBefore = [{ id: 'a', tool: 'claude', daily: [
+      ...days('2026-07-01', 14, d => row(d, 10, 20000, 0, 2)),
+      ...days('2026-07-16', 14, d => row(d, 10, 10000, 4, 2)),
+    ] }];
+    render(<InterventionPanel sessions={freeBefore} interventions={iv} today="2026-08-20" delay={0} />);
+    expect(screen.getByText(/could not run here/i)).toBeTruthy();
+  });
+
   it('names every dynamic glossary term the panel actually asks for', () => {
     // glossary.test.js only sees literal term="..." strings; TERMS[key] is a
     // dynamic expression it cannot see, so this colocated assertion is the

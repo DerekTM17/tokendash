@@ -36,7 +36,28 @@ describe('DriverDecomposition', () => {
       ...days('2026-07-16', 14, d => row(d, 90, 900000, 90, 60)),
     ] }];
     render(<DriverDecomposition sessions={violent} delay={0} />);
-    expect(screen.getByText(/order/i)).toBeTruthy();
+    expect(screen.getByText(/differ too much for the attribution order/i)).toBeTruthy();
+    expect(screen.queryByText(/could not run here/i)).toBe(null);
+  });
+
+  it('says the order-independence check never ran, distinctly from saying it passed', () => {
+    // LMDI needs every factor and both totals strictly positive. A half with
+    // real calls, tokens and turns but zero cost drives pricePerToken to 0, so
+    // the oracle is skipped and `orderSensitive` stays false — which used to
+    // render exactly like a clean cross-check: silence.
+    const freeBefore = [{ id: 'a', tool: 'claude', daily: [
+      ...days('2026-07-01', 14, d => row(d, 10, 20000, 0, 2)),
+      ...days('2026-07-16', 14, d => row(d, 10, 10000, 4, 2)),
+    ] }];
+    render(<DriverDecomposition sessions={freeBefore} delay={0} />);
+    expect(screen.getByText(/could not run here/i)).toBeTruthy();
+    expect(screen.queryByText(/differ too much for the attribution order/i)).toBe(null);
+  });
+
+  it('says nothing about the oracle when it ran and agreed', () => {
+    render(<DriverDecomposition sessions={sessions} delay={0} />);
+    expect(screen.queryByText(/could not run here/i)).toBe(null);
+    expect(screen.queryByText(/differ too much for the attribution order/i)).toBe(null);
   });
 
   it('renders an explanatory message naming the condition when a half is degenerate (no turns)', () => {
@@ -70,6 +91,23 @@ describe('DriverDecomposition', () => {
     // And the scaled price-per-token figure should read as a dollar amount
     // per million tokens, not a bare per-token fraction.
     expect(screen.getAllByText(/\/ 1M/).length).toBeGreaterThan(0);
+  });
+
+  it('labels the compared period from turn-capable days only', () => {
+    // The live shape: a lone opencode day six weeks before any Claude activity.
+    // It contributes nothing to the numbers — factorsFor counts turn-capable
+    // rows only — so it must not appear in the range the caption advertises,
+    // and it must not move the split point either.
+    const withEarlyOpencode = [
+      { id: 'old', tool: 'opencode', daily: [row('2026-04-27', 3, 5000, 2.65, 0)] },
+      ...sessions,
+    ];
+    const { container } = render(<DriverDecomposition sessions={withEarlyOpencode} delay={0} />);
+
+    expect(container.textContent).not.toMatch(/2026-04-27/);
+    expect(container.textContent).toMatch(
+      /2026-07-01\s*–\s*2026-07-14 compared with 2026-07-16\s*–\s*2026-07-29/
+    );
   });
 
   it('names every factor term the panel actually asks the glossary for', () => {

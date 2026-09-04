@@ -137,7 +137,7 @@ export const GLOSSARY = {
   },
   'driver decomposition': {
     title: 'Driver decomposition',
-    body: 'Splits a change in spend between the five things that can cause it, so a bigger bill can be traced to using the tool more, sending bigger prompts, or paying a higher rate. Each factor is measured holding the others still, and the five contributions add up to the total change exactly.',
+    body: 'Splits a change in spend between the five things that can cause it, so a bigger bill can be traced to using the tool more, sending bigger prompts, or paying a higher rate. Each factor is measured holding the others still, and the five contributions add up to the total change exactly. Measuring one factor at a time means the order they are measured in can change how the credit is shared out, so a second, order-independent method is run behind the scenes as a check and the panel says so when the two disagree. That check is one yes-or-no answer for the whole comparison, weighed against the largest contribution on the panel — a factor that is small in dollars can be badly misattributed in relative terms and still not trip it. And when any factor is zero the second method cannot run at all, which the panel reports separately: not checked is not the same as checked and sound.',
   },
   'intervention': {
     title: 'Intervention',

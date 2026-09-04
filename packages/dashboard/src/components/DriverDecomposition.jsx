@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { factorsFor, FACTOR_KEYS } from '../lib/factors.js';
+import { factorsFor, FACTOR_KEYS, TURN_CAPABLE } from '../lib/factors.js';
 import { decompose } from '../lib/decompose.js';
 import { formatCost, formatTokens } from '../lib/format.js';
 import InfoTip from './InfoTip.jsx';
+import AttributionNotes from './AttributionNotes.jsx';
 
 const LABELS = {
   activeDays: 'Active days',
@@ -40,11 +41,26 @@ function formatFactorValue(key, value) {
   }
 }
 
-/** Split the covered span in half and compare the halves. */
+/**
+ * Split the covered span in half and compare the halves.
+ *
+ * Turn-capable days ONLY, matching `factorsFor`. Collecting days from every
+ * tool put a label on this panel that its own numbers do not support: on the
+ * live corpus the earliest day of any tool is a 2026-04-27 opencode session
+ * with no Claude activity at all, so the caption read "2026-04-27 - 2026-07-21"
+ * for a before-half whose Claude data actually begins 2026-06-11 — six weeks
+ * of advertised period that contributed nothing. It also put `mid`, the split
+ * point, on the wrong population, so the two halves were not the halves the
+ * label named either.
+ *
+ * This project has already paid 41% for a coverage-window labelling bug, and
+ * explaining a bill to someone who will believe the label is this panel's
+ * entire job.
+ */
 function halves(sessions) {
   const days = new Set();
   for (const s of sessions) {
-    if (!s.daily?.length) continue;
+    if (!s.daily?.length || !TURN_CAPABLE.has(s.tool)) continue;
     for (const [day, calls] of s.daily) if (calls > 0) days.add(day);
   }
   const sorted = [...days].sort();
@@ -111,13 +127,10 @@ export default function DriverDecomposition({ sessions, delay = 0 }) {
               Total change {formatCost(result.total)}.
             </div>
 
-            {result.orderSensitive && (
-              <div style={{ fontFamily: 'var(--f-body)', fontSize: 11.5, color: 'var(--hot)', background: 'rgba(255,106,0,0.08)', border: '1px solid rgba(255,106,0,0.25)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, lineHeight: 1.5 }}>
-                These periods differ too much for the attribution order to be ignored:
-                a different factor order would tell a different story. Treat the split
-                between factors as indicative, not exact — the total is still right.
-              </div>
-            )}
+            <AttributionNotes
+              orderSensitive={result.orderSensitive}
+              oracleSkipped={result.oracleSkipped}
+            />
 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
