@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { dataCoverage, trimToCoverage, coverageWindow } from '../src/lib/coverage';
+import { strict as assert } from 'node:assert';
+import { dataCoverage, trimToCoverage, coverageWindow, firstCoveredDay } from '../src/lib/coverage';
 
 function dayRow(day, cost = 1) {
   return [day, 1, 0, 0, 0, 0, cost, 0, 0, 0];
@@ -142,5 +143,33 @@ describe('coverageWindow', () => {
   it('counts a single day as one day, never zero', () => {
     const sessions = [session('a', 'claude', 10, [dayRow('2026-08-14', 10)])];
     expect(coverageWindow(sessions, null).days).toBe(1);
+  });
+});
+
+const day = (d, cost) => [d, 1, 100, 10, 0, 0, cost, 0, 0, 0, 1];
+
+describe('firstCoveredDay', () => {
+  it('returns a floor on a single-tool corpus, where dataCoverage returns null', () => {
+    const sessions = [
+      { id: 'a', tool: 'claude', cost: 1, daily: [day('2026-06-11', 1)] },
+      { id: 'b', tool: 'claude', cost: 2, daily: [day('2026-07-01', 2)] },
+    ];
+    // The trap: nothing predates the dominant tool's first day, so dataCoverage
+    // has nothing to report and returns null. A guard keyed off it would have
+    // no floor at all — on the one deployment it was written to protect.
+    assert.equal(dataCoverage(sessions), null);
+    assert.equal(firstCoveredDay(sessions), '2026-06-11');
+  });
+
+  it('returns the trimmed start when an earlier tool exists', () => {
+    const sessions = [
+      { id: 'a', tool: 'opencode', cost: 0.5, daily: [day('2026-04-01', 0.5)] },
+      { id: 'b', tool: 'claude', cost: 100, daily: [day('2026-06-11', 100)] },
+    ];
+    assert.equal(firstCoveredDay(sessions), '2026-06-11');
+  });
+
+  it('returns null when there is no data at all', () => {
+    assert.equal(firstCoveredDay([]), null);
   });
 });

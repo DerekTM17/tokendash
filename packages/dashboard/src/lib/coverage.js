@@ -137,3 +137,22 @@ export function trimToCoverage(buckets, coverage, granularity = 'week') {
     return end.toISOString().slice(0, 10) >= coverage.start;
   });
 }
+
+/**
+ * The first day the record actually covers — the floor every guard must key off.
+ *
+ * `dataCoverage` answers a different question: "what is being TRIMMED from the
+ * charts", so it returns null when there is nothing earlier to trim. On a
+ * single-tool machine there never is — and the work deployment is Claude Code
+ * only. Verified on the local corpus: filtered to Claude sessions,
+ * `dataCoverage()` is null while the real floor is 2026-06-11.
+ *
+ * A guard keyed off `dataCoverage().start` would therefore have no floor and
+ * would silently pass every window, including ones reaching into transcripts
+ * the 30-day retention sweep already deleted — re-arming the exact failure
+ * `coverageWindow` was written to fix.
+ */
+export function firstCoveredDay(sessions) {
+  const window = coverageWindow(sessions, dataCoverage(sessions));
+  return window ? window.start : null;
+}
