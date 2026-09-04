@@ -5,6 +5,35 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseClaudeJSON } from '../src/parsers/claude.js';
 
+function tmpdir(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function assistant(id, ts, usage, model = 'claude-opus-5') {
+  return JSON.stringify({
+    type: 'assistant',
+    timestamp: ts,
+    cwd: '/home/test/proj',
+    message: { id, role: 'assistant', model, usage },
+  });
+}
+
+const usage = (input, cacheRead, cacheWrite, output = 10, oneHour = 0) => ({
+  input_tokens: input,
+  cache_read_input_tokens: cacheRead,
+  cache_creation_input_tokens: cacheWrite,
+  output_tokens: output,
+  ...(oneHour ? { cache_creation: { ephemeral_1h_input_tokens: oneHour } } : {}),
+});
+
+const userLine = (ts, content, extra = {}) => JSON.stringify({
+  type: 'user',
+  timestamp: ts,
+  cwd: '/home/test/proj',
+  message: { role: 'user', content },
+  ...extra,
+});
+
 const FIXTURE = JSON.stringify({
   parentUuid: 'abc123',
   isSidechain: false,
@@ -161,5 +190,59 @@ describe('claude parser integration', () => {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('user turns', () => {
+  it('counts real prompts and ignores tool results and slash commands', () => {
+    const dir = tmpdir('turns-');
+    const proj = path.join(dir, '-home-test-proj');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, 'sess.jsonl'), [
+      userLine('2026-07-01T10:00:00Z', 'first prompt'),
+      assistant('a', '2026-07-01T10:00:01Z', usage(10, 0, 100)),
+      userLine('2026-07-01T10:00:02Z', [{ type: 'tool_result', content: 'ok' }]),
+      assistant('b', '2026-07-01T10:00:03Z', usage(10, 100, 0)),
+      userLine('2026-07-01T10:00:04Z', '<command-name>/clear</command-name>'),
+      userLine('2026-07-02T09:00:00Z', 'second prompt'),
+      assistant('c', '2026-07-02T09:00:01Z', usage(10, 100, 0)),
+    ].join('\n') + '\n');
+
+    const [s] = parseClaudeJSON(dir);
+    assert.equal(s.userTurns, 2, 'two real prompts');
+    assert.equal(s.apiCalls, 3);
+
+    const byDay = Object.fromEntries(s.dailyTokens.map(d => [d.day, d.turns]));
+    assert.equal(byDay['2026-07-01'], 1);
+    assert.equal(byDay['2026-07-02'], 1);
+  });
+
+  it('satisfies the requests-per-turn floor', () => {
+    const dir = tmpdir('turns-floor-');
+    const proj = path.join(dir, '-home-test-proj');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, 'sess.jsonl'), [
+      userLine('2026-07-01T10:00:00Z', 'prompt'),
+      assistant('a', '2026-07-01T10:00:01Z', usage(10, 0, 100)),
+    ].join('\n') + '\n');
+
+    const [s] = parseClaudeJSON(dir);
+    assert.ok(s.apiCalls / s.userTurns >= 1,
+      'requests/turn below 1 means the rule admitted a non-prompt');
+  });
+
+  it('records a turn on a day with no API calls', () => {
+    const dir = tmpdir('turns-noc-');
+    const proj = path.join(dir, '-home-test-proj');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, 'sess.jsonl'), [
+      userLine('2026-07-01T23:59:00Z', 'late prompt'),
+      assistant('a', '2026-07-02T00:00:30Z', usage(10, 0, 100)),
+    ].join('\n') + '\n');
+
+    const [s] = parseClaudeJSON(dir);
+    const d1 = s.dailyTokens.find(d => d.day === '2026-07-01');
+    assert.equal(d1.turns, 1);
+    assert.equal(d1.calls, 0, 'no call landed on the first day');
   });
 });

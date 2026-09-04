@@ -44,6 +44,20 @@ export function addDay(byDay, day, tok) {
   return slice;
 }
 
+/** Record a user turn on `day`. Turns are counted in the transcript's line loop
+ *  while calls are counted per assistant entry, so a day can legitimately hold
+ *  turns with no calls (a prompt at 23:59 answered after midnight) or calls with
+ *  no turns (a long tool loop). Both must produce a valid slice. */
+export function addTurn(byDay, day) {
+  let slice = byDay.get(day);
+  if (!slice) {
+    slice = { day, calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 0 };
+    byDay.set(day, slice);
+  }
+  slice.turns = (slice.turns || 0) + 1;
+  return slice;
+}
+
 /** Map -> ascending array. Days are unique by construction; sorting makes the
  *  emitted order deterministic regardless of the order calls were seen. */
 export function toDailyTokens(byDay) {

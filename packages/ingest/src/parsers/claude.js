@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { addDay, toDailyTokens } from '../daily.js';
+import { addDay, addTurn, toDailyTokens } from '../daily.js';
+import { isUserTurn } from '../turns.js';
 
 function decodeCwdFromDir(dirName) {
   if (dirName.charAt(0) === '-') dirName = dirName.slice(1);
@@ -42,6 +43,10 @@ function parseTranscriptFile(filePath) {
   // message.id more than once (partial chunks + final). Summing every line
   // double-counts tokens (~2x), so keep only the highest-usage entry per id.
   const usageById = new Map();
+  // Turns are found during the line loop, but the dominant model is not known
+  // until after it — so buffer turn days here and apply them to the winning
+  // model's byDay once the winner is chosen.
+  const turnDays = [];
 
   for (const line of lines) {
     let entry;
@@ -56,6 +61,10 @@ function parseTranscriptFile(filePath) {
     }
     if (entry.cwd) {
       cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
+    }
+
+    if (isUserTurn(entry)) {
+      turnDays.push(entry.timestamp ? entry.timestamp.slice(0, 10) : null);
     }
 
     if (entry.type !== 'assistant') continue;
@@ -130,7 +139,28 @@ function parseTranscriptFile(filePath) {
     }
   }
 
-  return { cwd, firstTimestamp, byModel };
+  // Turns belong to the transcript, not to a model — a person typing a prompt
+  // is model-agnostic. Putting them on every sibling row would double-count
+  // them and halve Requests/Turn, so they go on exactly one row.
+  let turnModel = null;
+  let bestCalls = -1;
+  for (const [model, acc] of [...byModel.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (acc.calls > bestCalls) {
+      bestCalls = acc.calls;
+      turnModel = model;
+    }
+  }
+  let userTurns = 0;
+  if (turnModel !== null) {
+    const acc = byModel.get(turnModel);
+    for (const rawDay of turnDays) {
+      userTurns += 1;
+      const day = rawDay || fallbackDay;
+      if (day) addTurn(acc.byDay, day);
+    }
+  }
+
+  return { cwd, firstTimestamp, byModel, turnModel, userTurns };
 }
 
 export function parseClaudeJSON(projectsDir) {
@@ -178,6 +208,9 @@ export function parseClaudeJSON(projectsDir) {
           cacheWriteTokens: tok.cacheWrite,
           cacheWrite1hTokens: tok.cacheWrite1h,
           apiCalls: tok.calls,
+          userTurns: (!isSubagent && model === transcript.turnModel)
+            ? transcript.userTurns
+            : null,
           isSubagent,
           dailyTokens: toDailyTokens(tok.byDay),
           cost: 0,
