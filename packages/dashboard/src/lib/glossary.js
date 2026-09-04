@@ -115,6 +115,30 @@ export const GLOSSARY = {
     title: 'By project',
     body: 'Cost grouped by the folder the session was started in. Sessions launched outside a project directory fall into "other" — see coverage for how much that is.',
   },
+  'active days': {
+    title: 'Active days',
+    body: 'Days on which any API call was recorded. Used instead of "sessions" because most spend lives in sessions that span several days — 85 multi-day sessions carry 77% of all cost here — so counting whole sessions on their start date would pile three quarters of the bill onto whichever day each long one began.',
+  },
+  'turns per active day': {
+    title: 'Turns per active day',
+    body: 'How many prompts you sent on a typical working day. This is an engagement measure: it goes up when you use the tool more, not when it becomes less efficient.',
+  },
+  'requests per turn': {
+    title: 'Requests per turn',
+    body: 'How many API calls one prompt of yours sets off. One turn typically triggers many, because every tool call is another round trip, and a dispatched subagent brings a whole second conversation with it. This is the number that falls when tool calls are batched or MCP servers are swapped for CLI tools.',
+  },
+  'tokens per request': {
+    title: 'Tokens per request',
+    body: 'The average size of a single API call, counting everything billed: fresh input, output, and cache traffic both read and written. Note this is larger than the figure on the Per API call panel, which shows only the context handed to the model and leaves out what came back.',
+  },
+  'price per token': {
+    title: 'Price per token',
+    body: 'What a token costs on average across everything you ran. It moves when you switch models, but also when the mix of token types shifts — a cache read costs a tenth of fresh input, so reading more from cache pulls this number down without any model change.',
+  },
+  'driver decomposition': {
+    title: 'Driver decomposition',
+    body: 'Splits a change in spend between the five things that can cause it, so a bigger bill can be traced to using the tool more, sending bigger prompts, or paying a higher rate. Each factor is measured holding the others still, and the five contributions add up to the total change exactly.',
+  },
 };
 
 /** Definition body for a term, or null when the term is unknown. Case-insensitive

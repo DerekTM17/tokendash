@@ -7,6 +7,7 @@ import ActivityHeatmap from './components/ActivityHeatmap';
 import CostComposition from './components/CostComposition';
 import CostMixTrend from './components/CostMixTrend';
 import PerCallTrend from './components/PerCallTrend';
+import DriverDecomposition from './components/DriverDecomposition';
 import ToolBreakdown from './components/ToolBreakdown';
 import ModelBreakdown from './components/ModelBreakdown';
 import ModelEfficiency from './components/ModelEfficiency';
@@ -125,6 +126,7 @@ export default function App() {
               <CostMixTrend sessions={filtered} delay={265} />
               <PerCallTrend sessions={filtered} delay={272} />
               <ActivityHeatmap sessions={filtered} delay={280} />
+              <DriverDecomposition sessions={filtered} delay={285} />
               <SessionsTable sessions={filtered} delay={500} onSelect={setSelectedSession} />
             </div>
             <div className="lg:col-span-4" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
