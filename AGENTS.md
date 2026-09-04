@@ -78,6 +78,12 @@ plugin-install session must NOT get pinned to the project it happened to mention
   cacheWrite — because it answers "how big was the prompt the model was handed," and the model's
   output is not part of what it was handed. Both are correct for what they measure; a future reader
   who notices they disagree and "fixes" one to match the other will break whichever one they touch.
+- **A user turn is not `type === 'user'`.** `packages/ingest/src/turns.js` is what a `type === 'user'`
+  entry has to clear to count as a real prompt: `isMeta`, `isSidechain` and `isCompactSummary` must
+  all be falsy, the content must not be a `tool_result` array, and the text must not be a
+  slash-command echo, local-command-stdout echo, interrupt marker, or bare system reminder. The
+  naive rule this replaces admits 2,112 entries where 1,607 are real turns. Change turn detection
+  there, not inline wherever a caller happens to need a turn count.
 - Every parser needs an integration test that runs the real parser against a small trimmed real
   fixture and asserts non-zero, correctly-shaped output — not just component tests with fake props.
 - Commands: `npm run ingest`, `npm run dev`, `npm run build`, `npm test`.

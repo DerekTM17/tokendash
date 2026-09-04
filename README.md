@@ -82,7 +82,7 @@ Two panels answer "why did my bill move" rather than "how much was it."
 turns per active day x requests per turn x tokens per request x price per
 token — so a change in the total can be pinned on one of them instead of
 argued about qualitatively. A "turn" is a real prompt, not a tool result (see
-`AGENTS.md` for how that distinction is made), and everything is day-sliced
+`packages/ingest/src/turns.js` for how that distinction is made), and everything is day-sliced
 the same way the per-call panel is, so a session spanning a week does not get
 its whole cost credited to the day it started. `Tokens/Request` here counts
 all four token buckets — input, output, cacheRead, cacheWrite — because the
@@ -100,7 +100,7 @@ to find a flattering number after the fact, and a factor picked once you have
 already seen the outcome proves nothing. Re-run ingest and the panel compares
 matched before/after windows, checks whether something else moved at the same
 time that could explain the shift instead (model mix, project mix, subagent
-share, cache mix), and reports a verdict — supported, not supported,
+share, token-type mix including cache), and reports a verdict — supported, not supported,
 confounded, underpowered, provisional, pending, or refused — with the
 reasoning spelled out rather than just a number. Once a before-window ages
 out of the 30-day retention sweep a verdict can no longer be recomputed, so a
