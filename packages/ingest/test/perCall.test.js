@@ -29,6 +29,13 @@ const usage = (input, cacheRead, cacheWrite, output = 10, oneHour = 0) => ({
   ...(oneHour ? { cache_creation: { ephemeral_1h_input_tokens: oneHour } } : {}),
 });
 
+const userLine = (ts, content) => JSON.stringify({
+  type: 'user',
+  timestamp: ts,
+  cwd: '/home/test/proj',
+  message: { role: 'user', content },
+});
+
 describe('claude apiCalls', () => {
   it('counts one call per message.id, not per logged line', () => {
     const dir = tmpdir('calls-dedupe-');
@@ -120,9 +127,16 @@ describe('per-day attribution', () => {
     const dir = tmpdir('calls-invariant-');
     const proj = path.join(dir, '-home-test-proj');
     fs.mkdirSync(proj, { recursive: true });
+    // Real prompts on both days. Without them `userTurns` is 0 and the turns
+    // assertion below is `0 === 0` — it holds no matter what the daily `turns`
+    // column contains, which is the one column of the eleven this invariant
+    // test would otherwise never check.
     fs.writeFileSync(path.join(proj, 's1.jsonl'), [
+      userLine('2026-07-01T09:59:00Z', 'first prompt'),
       assistant('a', '2026-07-01T10:00:00Z', usage(3, 0, 1000, 40, 600)),
+      userLine('2026-07-02T09:59:00Z', 'second prompt'),
       assistant('b', '2026-07-02T10:00:00Z', usage(5, 1000, 700, 60, 200)),
+      userLine('2026-07-02T17:59:00Z', 'third prompt'),
       assistant('c', '2026-07-02T18:00:00Z', usage(7, 1700, 300, 80, 0)),
     ].join('\n') + '\n');
 
@@ -139,6 +153,7 @@ describe('per-day attribution', () => {
       assert.ok(Math.abs(sum(i) - s.costParts[part]) < 1e-6, `cost ${part}`);
     }
     assert.ok(s.daily.length > 0);
+    assert.equal(s.userTurns, 3, 'the fixture records real prompts, so turns is not vacuously 0');
     assert.equal(sum(10), s.userTurns ?? 0, 'turns');
     assert.equal(s.daily[0].length, DAILY_COLUMNS.length, 'row length matches the contract');
   });

@@ -20,7 +20,20 @@ describe('InterventionPanel', () => {
   it('shows the verdict and the declared factor', () => {
     render(<InterventionPanel sessions={sessions} interventions={iv} today="2026-08-20" delay={0} />);
     expect(screen.getByText('MCP to CLI')).toBeTruthy();
-    expect(screen.getByText(/supported/i)).toBeTruthy();
+    expect(screen.getByText(/^Supported$/)).toBeTruthy();
+  });
+
+  it('distinguishes Not supported from Supported', () => {
+    // `/supported/i` also matches "Not supported", so an unanchored assertion
+    // cannot tell the two verdicts apart — it passes either way, which is the
+    // opposite of what a verdict test is for.
+    const worse = [{ id: 'a', tool: 'claude', daily: [
+      ...days('2026-07-01', 14, d => row(d, 10, 10000, 4, 2)),
+      ...days('2026-07-16', 14, d => row(d, 10, 20000, 8, 2)),
+    ] }];
+    render(<InterventionPanel sessions={worse} interventions={iv} today="2026-08-20" delay={0} />);
+    expect(screen.getByText('Not supported')).toBeTruthy();
+    expect(screen.queryByText(/^Supported$/)).toBe(null);
   });
 
   it('explains itself when nothing is declared', () => {
@@ -47,7 +60,7 @@ describe('InterventionPanel', () => {
     ];
     const declared = [{ date: '2026-07-15', label: 'Switched to Sonnet', expect: 'tokensPerRequest', note: '', direction: 'down', expectedShift: ['model/opus', 'model/sonnet'] }];
     render(<InterventionPanel sessions={modelSessions} interventions={declared} today="2026-08-20" delay={0} />);
-    expect(screen.getByText(/supported/i)).toBeTruthy();
+    expect(screen.getByText(/^Supported$/)).toBeTruthy();
     expect(screen.getAllByText(/pre-registered/i).length).toBeGreaterThan(0);
   });
 
@@ -60,7 +73,7 @@ describe('InterventionPanel', () => {
     const frozen = { verdict: 'supported', reasons: ['tokensPerRequest fell from 2000 to 1000.'], frozenAt: '2026-10-01' };
     render(<InterventionPanel sessions={sessions} today="2026-08-20" delay={0}
       interventions={[{ ...iv[0], date: '2026-07-03', result: frozen }]} />);
-    expect(screen.getByText(/supported/i)).toBeTruthy();
+    expect(screen.getByText(/^Supported$/)).toBeTruthy();
     expect(screen.queryByText(/refused/i)).toBe(null);
     expect(screen.getByText(/frozen 2026-10-01/i)).toBeTruthy();
   });
@@ -72,7 +85,7 @@ describe('InterventionPanel', () => {
     const frozen = { verdict: 'supported', frozenAt: '2026-10-01' };
     render(<InterventionPanel sessions={sessions} today="2026-08-20" delay={0}
       interventions={[{ ...iv[0], result: frozen }]} />);
-    expect(screen.getByText(/supported/i)).toBeTruthy();
+    expect(screen.getByText(/^Supported$/)).toBeTruthy();
     expect(screen.getByText(/frozen 2026-10-01/i)).toBeTruthy();
   });
 

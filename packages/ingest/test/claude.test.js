@@ -274,6 +274,76 @@ describe('user turns', () => {
   });
 });
 
+describe('multi-model turn attribution', () => {
+  // Turns belong to the transcript, not to a model — a person typing a prompt
+  // is model-agnostic — so they go on exactly ONE of the rows a multi-model
+  // transcript emits. Which row is decided by call count, ties broken on model
+  // name ascending. The real corpus exercises this, but only by accident of
+  // whatever mix it happens to hold; the deterministic rule had no fixture.
+
+  it('puts every turn on the model with the most calls, and null on its siblings', () => {
+    const base = tmpdir('turnmodel-calls-');
+    const dir = path.join(base, 'proj');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'main.jsonl'), [
+      userLine('2026-07-01T10:00:00Z', 'first prompt'),
+      // 'zzz-model' sorts LAST but carries more calls, so call count must win
+      // over the name tie-break rather than the other way round.
+      assistant('a', '2026-07-01T10:00:01Z', usage(10, 0, 100), 'zzz-model'),
+      assistant('b', '2026-07-01T10:00:02Z', usage(10, 0, 100), 'zzz-model'),
+      userLine('2026-07-01T10:01:00Z', 'second prompt'),
+      assistant('c', '2026-07-01T10:01:01Z', usage(10, 0, 100), 'aaa-model'),
+    ].join('\n') + '\n');
+
+    const sessions = parseClaudeJSON(base);
+    const winner = sessions.find(s => s.model === 'zzz-model');
+    const sibling = sessions.find(s => s.model === 'aaa-model');
+
+    assert.equal(winner.userTurns, 2, 'the busiest model carries every turn');
+    assert.strictEqual(sibling.userTurns, null, 'siblings carry null, never 0');
+    assert.equal(
+      winner.dailyTokens.reduce((n, d) => n + (d.turns || 0), 0), 2,
+      'the day slices carry the turns too'
+    );
+    assert.equal(sibling.dailyTokens.reduce((n, d) => n + (d.turns || 0), 0), 0);
+  });
+
+  it('breaks a call-count tie on model name ascending', () => {
+    const base = tmpdir('turnmodel-tie-');
+    const dir = path.join(base, 'proj');
+    fs.mkdirSync(dir, { recursive: true });
+    // One call each. Written zzz-first so the result cannot come from
+    // insertion order.
+    fs.writeFileSync(path.join(dir, 'main.jsonl'), [
+      userLine('2026-07-01T10:00:00Z', 'a prompt'),
+      assistant('a', '2026-07-01T10:00:01Z', usage(10, 0, 100), 'zzz-model'),
+      assistant('b', '2026-07-01T10:00:02Z', usage(10, 0, 100), 'aaa-model'),
+    ].join('\n') + '\n');
+
+    const sessions = parseClaudeJSON(base);
+    assert.equal(sessions.find(s => s.model === 'aaa-model').userTurns, 1);
+    assert.strictEqual(sessions.find(s => s.model === 'zzz-model').userTurns, null);
+  });
+
+  it('counts each turn once across the whole transcript', () => {
+    // The reason turns sit on one row rather than every sibling: putting them
+    // on both would double-count them and halve Requests/Turn.
+    const base = tmpdir('turnmodel-once-');
+    const dir = path.join(base, 'proj');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'main.jsonl'), [
+      userLine('2026-07-01T10:00:00Z', 'one'),
+      assistant('a', '2026-07-01T10:00:01Z', usage(10, 0, 100), 'aaa-model'),
+      userLine('2026-07-01T10:01:00Z', 'two'),
+      assistant('b', '2026-07-01T10:01:01Z', usage(10, 0, 100), 'zzz-model'),
+    ].join('\n') + '\n');
+
+    const sessions = parseClaudeJSON(base);
+    assert.equal(sessions.length, 2, 'one row per model');
+    assert.equal(sessions.reduce((n, s) => n + (s.userTurns || 0), 0), 2);
+  });
+});
+
 describe('subagent turns', () => {
   it('never counts a dispatch prompt as a user turn', () => {
     // parseClaudeJSON scans base for PROJECT DIRECTORIES and reads .jsonl

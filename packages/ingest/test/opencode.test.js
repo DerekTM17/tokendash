@@ -141,6 +141,15 @@ describe('opencode parser integration', () => {
       const total1 = s1.inputTokens + s1.outputTokens + s1.cacheReadTokens + s1.cacheWriteTokens;
       assert.ok(total1 > 0, 'total tokens should be > 0');
 
+      // opencode records no user turns, and the binding rule is that such rows
+      // carry `null`, never `0` — zero would make requests/turn infinite and
+      // corrupt every mixed-tool aggregate. Asserted on PARSER output, because
+      // the normalizer's `?? null` fallback would happily mask the literal
+      // going missing from opencode.js.
+      for (const s of sessions) {
+        assert.strictEqual(s.userTurns, null, `${s.id}: opencode rows carry null turns, never 0`);
+      }
+
       // Session 2: null model
       const s2 = sessions.find(x => x.id === 'ses_002');
       assert.ok(s2, 'should find ses_002');

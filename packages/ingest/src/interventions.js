@@ -27,6 +27,13 @@ const DEFAULT_DIRECTION = 'down';
 
 const isDay = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
+/** Distinguish "I could not open this" from "I opened it and it is not JSON".
+ *  `fs` errors carry an errno `code` (EISDIR, EACCES, ...); a `JSON.parse`
+ *  SyntaxError does not. */
+const readOrParseWarning = (name, e) => e.code
+  ? `${name} could not be read (${e.code}) — ignoring the file.`
+  : `${name} is not valid JSON (${e.message}) — ignoring the file.`;
+
 export function readInterventions(filePath) {
   const warnings = [];
   if (!fs.existsSync(filePath)) return { entries: [], warnings };
@@ -35,7 +42,11 @@ export function readInterventions(filePath) {
   try {
     raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch (e) {
-    warnings.push(`interventions.json is not valid JSON (${e.message}) — ignoring the file.`);
+    // A read failure and a parse failure are different problems and the fix for
+    // each is different. Reporting EISDIR or EACCES as "is not valid JSON"
+    // sends the reader to inspect a file that parsed fine, or that they cannot
+    // open at all. Only a SyntaxError arrives here without an errno `code`.
+    warnings.push(readOrParseWarning('interventions.json', e));
     return { entries: [], warnings };
   }
   if (!Array.isArray(raw)) {
@@ -117,7 +128,7 @@ export function mergeResults(entries, sidecarPath) {
   try {
     frozen = JSON.parse(fs.readFileSync(sidecarPath, 'utf8'));
   } catch (e) {
-    warnings.push(`interventions.results.json is not valid JSON (${e.message}) — ignoring the file.`);
+    warnings.push(readOrParseWarning('interventions.results.json', e));
     return bail();
   }
   if (!frozen || typeof frozen !== 'object' || Array.isArray(frozen)) {

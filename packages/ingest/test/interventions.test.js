@@ -85,6 +85,20 @@ describe('readInterventions', () => {
     const { entries, warnings } = readInterventions(f);
     assert.deepEqual(entries, []);
     assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /not valid JSON/);
+  });
+
+  it('reports a read failure as a read failure, not as bad JSON', () => {
+    // A directory where the file should be. The old message sent the reader to
+    // go and fix the syntax of a file they cannot open at all.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iv-eisdir-'));
+    const asDir = path.join(dir, 'interventions.json');
+    fs.mkdirSync(asDir);
+    const { entries, warnings } = readInterventions(asDir);
+    assert.deepEqual(entries, []);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /could not be read \(EISDIR\)/);
+    assert.doesNotMatch(warnings[0], /not valid JSON/);
   });
 });
 

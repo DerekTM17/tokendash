@@ -81,6 +81,13 @@ describe('codex parser integration', () => {
       // normalizer can attribute home-dir-launched sessions to a project.
       assert.strictEqual(s.contentPathRefs['/home/test/projects/attractor/src'], 1);
       assert.strictEqual(s.contentPathRefs['/home/test/projects/attractor/package.json'], 1);
+
+      // Codex rollouts carry no user-turn concept, and the binding rule is that
+      // such rows carry `null`, never `0` — zero would make requests/turn
+      // infinite and corrupt every mixed-tool aggregate. Asserted on PARSER
+      // output: the normalizer's `?? null` fallback would mask the literal
+      // going missing from codex.js, so testing only there proves nothing.
+      assert.strictEqual(s.userTurns, null, 'codex rows carry null turns, never 0');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
