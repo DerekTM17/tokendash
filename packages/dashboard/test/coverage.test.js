@@ -2,9 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { dataCoverage, trimToCoverage, coverageWindow, firstCoveredDay } from '../src/lib/coverage';
 
-function dayRow(day, cost = 1) {
-  return [day, 1, 0, 0, 0, 0, cost, 0, 0, 0];
+// 11 columns, matching ingest's DAILY_COLUMNS — the trailing `turns` column is
+// what makes a turn-only row expressible at all, so a 10-column helper cannot
+// build the case coverage now has to exclude.
+function dayRow(day, cost = 1, calls = 1, turns = 1) {
+  return [day, calls, 0, 0, 0, 0, cost, 0, 0, 0, turns];
 }
+
+/** A day holding user turns and no API call — the shape `addTurn` creates for a
+ *  prompt typed at 23:59 whose answer lands after midnight. No calls, no
+ *  tokens, no cost. */
+const turnOnlyRow = (day, turns = 28) => dayRow(day, 0, 0, turns);
 
 const session = (id, tool, cost, daily) => ({ id, tool, cost, daily });
 
@@ -59,6 +67,21 @@ describe('dataCoverage', () => {
     expect(coverage.excluded.sessions).toBe(1);
     expect(coverage.excluded.cost).toBeCloseTo(3, 5);
     expect(coverage.excluded.firstDay).toBe('2026-04-27');
+  });
+
+  it('does not anchor coverage to a turn-only day', () => {
+    // The dominant tool's earliest ROW is 2026-06-10, but that row has no calls
+    // — a prompt whose answer landed after midnight. Anchoring to it would pull
+    // `start` a day early and hand every downstream guard a floor the data
+    // does not support.
+    const sessions = [
+      session('old', 'opencode', 2.65, [dayRow('2026-04-27', 2.65)]),
+      session('big', 'claude', 7869, [turnOnlyRow('2026-06-10'), dayRow('2026-06-11', 7869)]),
+    ];
+
+    const coverage = dataCoverage(sessions);
+
+    expect(coverage.start).toBe('2026-06-11');
   });
 
   it('ignores the part of a straddling session that falls after the start', () => {
@@ -143,6 +166,30 @@ describe('coverageWindow', () => {
   it('counts a single day as one day, never zero', () => {
     const sessions = [session('a', 'claude', 10, [dayRow('2026-08-14', 10)])];
     expect(coverageWindow(sessions, null).days).toBe(1);
+  });
+
+  it('does not let a turn-only day extend the window at either end', () => {
+    // A turn-only row on the day before and the day after the real span. It
+    // carries no calls, no tokens and no cost, so it is not coverage — but it
+    // would silently widen `days`, the denominator of the burn rate, by 2.
+    const sessions = [session('a', 'claude', 100, [
+      turnOnlyRow('2026-06-10'),
+      dayRow('2026-06-11', 60),
+      dayRow('2026-06-12', 40),
+      turnOnlyRow('2026-06-13'),
+    ])];
+
+    const w = coverageWindow(sessions, null);
+
+    expect(w.start).toBe('2026-06-11');
+    expect(w.end).toBe('2026-06-12');
+    expect(w.days).toBe(2);
+    expect(w.cost).toBeCloseTo(100, 5);
+  });
+
+  it('returns null when every row is turn-only', () => {
+    const sessions = [session('a', 'claude', 0, [turnOnlyRow('2026-06-10')])];
+    expect(coverageWindow(sessions, null)).toBeNull();
   });
 });
 

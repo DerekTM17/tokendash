@@ -16,6 +16,16 @@
  *
  * This module answers only "where does coverage begin, and what is being cut."
  * The panels decide how to say it.
+ *
+ * A `daily` row with `calls === 0` is NOT coverage. Turn counting introduced
+ * that shape: `addTurn` creates a slice for a prompt typed at 23:59 whose
+ * answer lands after midnight, so a day can hold turns and no API call at all
+ * (10 such rows in the reference corpus, e.g. 2026-07-19 with 28 turns and 0
+ * calls). Letting one of those extend the window would move `start`/`end` — the
+ * denominator of the burn rate, and via `firstCoveredDay` the intervention
+ * coverage floor, which such a row moves EARLIER, the unsafe direction. Those
+ * rows carry no tokens and therefore no cost, so skipping them drops nothing
+ * from the money side.
  */
 
 /** The tool carrying the most cost. Coverage is anchored to it because it sets
@@ -53,7 +63,8 @@ export function dataCoverage(sessions) {
   let start = null;
   for (const s of sessions) {
     if (s.tool !== tool || !s.daily?.length) continue;
-    for (const [day] of s.daily) {
+    for (const [day, calls] of s.daily) {
+      if (!calls) continue;
       if (start === null || day < start) start = day;
     }
   }
@@ -64,7 +75,8 @@ export function dataCoverage(sessions) {
   const seenTools = new Set();
   for (const s of sessions) {
     if (!s.daily?.length) continue;
-    for (const [day, , , , , , costInput, costOutput, costCacheRead, costCacheWrite] of s.daily) {
+    for (const [day, calls, , , , , costInput, costOutput, costCacheRead, costCacheWrite] of s.daily) {
+      if (!calls) continue;
       if (day >= start) continue;
       seenSessions.add(s.id);
       seenTools.add(s.tool);
@@ -107,7 +119,8 @@ export function coverageWindow(sessions, coverage) {
 
   for (const s of sessions) {
     if (!s.daily?.length) continue;
-    for (const [day, , , , , , costInput, costOutput, costCacheRead, costCacheWrite] of s.daily) {
+    for (const [day, calls, , , , , costInput, costOutput, costCacheRead, costCacheWrite] of s.daily) {
+      if (!calls) continue;
       const dayCost = costInput + costOutput + costCacheRead + costCacheWrite;
       if (first === null || day < first) first = day;
       if (end === null || day > end) end = day;
