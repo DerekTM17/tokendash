@@ -124,8 +124,8 @@ export default function App() {
             <div className="lg:col-span-8" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <UsageChart sessions={filtered} delay={200} />
               <CostComposition sessions={filtered} delay={250} />
-              <CostMixTrend sessions={filtered} delay={265} />
-              <PerCallTrend sessions={filtered} delay={272} />
+              <CostMixTrend sessions={filtered} interventions={data?.interventions || []} delay={265} />
+              <PerCallTrend sessions={filtered} interventions={data?.interventions || []} delay={272} />
               <ActivityHeatmap sessions={filtered} delay={280} />
               <DriverDecomposition sessions={filtered} delay={285} />
               <InterventionPanel

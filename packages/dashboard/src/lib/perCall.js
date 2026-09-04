@@ -47,7 +47,10 @@ function weekStart(day) {
   return d.toISOString().slice(0, 10);
 }
 
-function bucketKey(day, granularity) {
+/** Exported so PerCallTrend can map an intervention's calendar date onto the
+ *  same bucket key the series actually uses — recomputing it in the component
+ *  would drift from this at week granularity. */
+export function bucketKey(day, granularity) {
   return granularity === 'week' ? weekStart(day) : day;
 }
 

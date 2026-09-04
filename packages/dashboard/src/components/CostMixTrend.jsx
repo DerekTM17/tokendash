@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
   ComposedChart, Area, Bar, XAxis, YAxis, Tooltip, Legend,
-  CartesianGrid, ResponsiveContainer,
+  CartesianGrid, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { bucketCostMix } from '../lib/costMix';
+import { bucketCostMix, bucketKey } from '../lib/costMix';
 import { dataCoverage, trimToCoverage } from '../lib/coverage';
 import { formatCost, formatAxisDollars } from '../lib/format';
 import { PARTS } from '../lib/costParts';
@@ -97,7 +97,7 @@ const renderLegend = ({ payload }) => (
   </div>
 );
 
-export default function CostMixTrend({ sessions, delay = 0 }) {
+export default function CostMixTrend({ sessions, delay = 0, interventions = [] }) {
   const [granularity, setGranularity] = useState('week');
   const [mode, setMode] = useState('share');
 
@@ -173,6 +173,23 @@ export default function CostMixTrend({ sessions, delay = 0 }) {
               )}
               <Tooltip content={<CostMixTooltip granularity={granularity} />} />
               <Legend content={renderLegend} />
+              {interventions.map(iv => (
+                // ifOverflow defaults to "discard": recharts drops a line whose x
+                // falls outside the category axis domain rather than mis-plotting
+                // it, so a date outside the trimmed coverage window is silently
+                // absent instead of drawing a stray or misplaced line.
+                <ReferenceLine
+                  key={iv.date + iv.label}
+                  // This chart has no yAxisId="0" — Areas and the Bar use
+                  // "left" (and "right"). ReferenceLine's default yAxisId is 0,
+                  // which would throw looking up a y-axis that doesn't exist.
+                  yAxisId="left"
+                  x={bucketKey(iv.date, granularity)}
+                  stroke="currentColor"
+                  strokeDasharray="3 3"
+                  label={{ value: iv.label, position: 'insideTopRight', fontSize: 11 }}
+                />
+              ))}
               {PARTS.map(part => (
                 <Area
                   key={part.key}

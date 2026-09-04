@@ -94,6 +94,33 @@ describe('CostMixTrend', () => {
     const { container } = render(<CostMixTrend sessions={sessions} />);
     expect(container.querySelectorAll('.recharts-area-dots circle')).toHaveLength(0);
   });
+
+  it('draws a reference line for each intervention in range', () => {
+    // This file already mocks ResponsiveContainer to a fixed size, so recharts
+    // actually renders. Without that mock jsdom reports zero size, recharts
+    // renders no children, and any assertion here would pass vacuously.
+    // 2026-07-22 falls in the same week (Sun 2026-07-19 - Sat 2026-07-25) as
+    // the fixture's first bucket, so it maps onto a key that is actually in
+    // the rendered domain.
+    const { container } = render(
+      <CostMixTrend sessions={sessions} delay={0}
+        interventions={[{ date: '2026-07-22', label: 'MCP to CLI' }]} />
+    );
+    expect(container.querySelectorAll('.recharts-reference-line').length).toBe(1);
+  });
+
+  it('draws no reference line for an intervention outside the covered window', () => {
+    // 2026-01-01 predates every session in the fixture by months. recharts
+    // discards a ReferenceLine whose x falls outside the category axis domain
+    // (default ifOverflow="discard"), but that is only true because bucketKey
+    // maps it to a week that never appears in `data` — confirm it here rather
+    // than trust that mechanism by luck.
+    const { container } = render(
+      <CostMixTrend sessions={sessions} delay={0}
+        interventions={[{ date: '2026-01-01', label: 'Out of range' }]} />
+    );
+    expect(container.querySelectorAll('.recharts-reference-line').length).toBe(0);
+  });
 });
 
 // CostMixTooltip needs no recharts to render — it's a plain function of

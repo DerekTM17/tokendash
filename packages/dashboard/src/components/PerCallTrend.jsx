@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend,
-  CartesianGrid, ResponsiveContainer,
+  CartesianGrid, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { bucketPerCall, toChartRows, SERIES } from '../lib/perCall';
+import { bucketPerCall, toChartRows, SERIES, bucketKey } from '../lib/perCall';
 import { dataCoverage, trimToCoverage } from '../lib/coverage';
 import { formatTokens, formatAxisDollars } from '../lib/format';
 import ToggleButton from './ToggleButton';
@@ -87,7 +87,7 @@ const renderLegend = ({ payload }) => (
   </div>
 );
 
-export default function PerCallTrend({ sessions, delay = 0 }) {
+export default function PerCallTrend({ sessions, delay = 0, interventions = [] }) {
   const [granularity, setGranularity] = useState('week');
   const [metric, setMetric] = useState('context');
 
@@ -146,6 +146,19 @@ export default function PerCallTrend({ sessions, delay = 0 }) {
                 />
                 <Tooltip content={<PerCallTooltip granularity={granularity} metric={metric} />} />
                 <Legend content={renderLegend} />
+                {interventions.map(iv => (
+                  // ifOverflow defaults to "discard": recharts drops a line whose x
+                  // falls outside the category axis domain rather than mis-plotting
+                  // it, so a date outside the trimmed coverage window is silently
+                  // absent instead of drawing a stray or misplaced line.
+                  <ReferenceLine
+                    key={iv.date + iv.label}
+                    x={bucketKey(iv.date, granularity)}
+                    stroke="currentColor"
+                    strokeDasharray="3 3"
+                    label={{ value: iv.label, position: 'insideTopRight', fontSize: 11 }}
+                  />
+                ))}
                 {SERIES.map(s => (
                   <Line
                     key={s.key}
