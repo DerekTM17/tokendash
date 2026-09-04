@@ -2,6 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { evaluate } from '../src/lib/intervention.js';
 
 const row = (d, calls, tokens, cost, turns) => [d, calls, tokens, 0, 0, 0, cost, 0, 0, 0, turns];
+// Like row(), but places cost in a chosen token-type bucket instead of always
+// costInput. Needed to exercise the tokenType confound dimension: row() alone
+// puts 100% of cost in costInput on both sides of every test, so
+// tokenTypeShares never moves and that dimension can never fire in the suite.
+const rowBucket = (d, calls, tokens, cost, turns, bucket) => {
+  const costs = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, [bucket]: cost };
+  return [d, calls, tokens, 0, 0, 0, costs.input, costs.output, costs.cacheRead, costs.cacheWrite, turns];
+};
 const days = (from, n, fn) => {
   const out = [];
   const t = Date.parse(from + 'T00:00:00Z');
@@ -89,6 +97,23 @@ describe('evaluate', () => {
     const r = evaluate(sessions, { ...iv, expectedShift: ['model'] }, { today });
     expect(r.verdict).toBe('supported');
     expect(r.confounds.some(c => c.dimension === 'model' && c.expected)).toBe(true);
+  });
+
+  it('flags a token-type mix shift as a confound', () => {
+    // Same session both sides (no model/project/subagent shift), but cost
+    // moves entirely from cacheWrite to cacheRead across the boundary.
+    const sessions = [claude('a', [
+      ...days('2026-07-01', 14, d => rowBucket(d, 10, 20000, 8, 2, 'cacheWrite')),
+      ...days('2026-07-16', 14, d => rowBucket(d, 10, 10000, 4, 2, 'cacheRead')),
+    ])];
+    const r = evaluate(sessions, iv, { today });
+    const confound = r.confounds.find(c => c.dimension === 'tokenType' && c.category === 'cacheWrite');
+    expect(confound).toBeTruthy();
+    expect(Math.abs(confound.delta)).toBeGreaterThan(0.10);
+  });
+
+  it('throws when options.today is not provided', () => {
+    expect(() => evaluate(corpus(), iv, {})).toThrow(/today/i);
   });
 
   it('lists an overlapping intervention as a confound', () => {

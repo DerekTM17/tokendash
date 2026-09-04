@@ -78,6 +78,17 @@ export function evaluate(sessions, intervention, options = {}) {
     // day-of-week mixes and manufactures a difference.
     throw new Error(`windowDays must be a multiple of 7 (got ${opts.windowDays})`);
   }
+  if (typeof opts.today !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(opts.today)) {
+    // No default here, deliberately. `date > opts.today` and `windows.afterTo >
+    // opts.today` both compare against `undefined` as false, so a missing
+    // `today` would silently disable the pending AND provisional guards
+    // together rather than fail loudly. Defaulting to the real current date
+    // would hide the same bug and make any test that omits `today` implicitly
+    // time-dependent - passing now, failing in three weeks, for a reason
+    // nobody would connect to this line. A caller bug belongs at the call
+    // site, not papered over here.
+    throw new Error(`options.today must be an explicit 'YYYY-MM-DD' date (got ${JSON.stringify(opts.today)})`);
+  }
 
   const n = opts.windowDays;
   const date = intervention.date;
