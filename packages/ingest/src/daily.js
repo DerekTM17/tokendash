@@ -28,6 +28,7 @@ export const DAILY_COLUMNS = [
   'costOutput',
   'costCacheRead',
   'costCacheWrite',
+  'turns',
 ];
 
 const TOKEN_FIELDS = ['input', 'output', 'cacheRead', 'cacheWrite', 'cacheWrite1h'];

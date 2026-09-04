@@ -6,6 +6,7 @@ import path from 'node:path';
 import { parseClaudeJSON } from '../src/parsers/claude.js';
 import { parseCodexData } from '../src/parsers/codex.js';
 import { normalize } from '../src/normalizer.js';
+import { DAILY_COLUMNS } from '../src/daily.js';
 
 function tmpdir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -138,6 +139,8 @@ describe('per-day attribution', () => {
       assert.ok(Math.abs(sum(i) - s.costParts[part]) < 1e-6, `cost ${part}`);
     }
     assert.ok(s.daily.length > 0);
+    assert.equal(sum(10), s.userTurns ?? 0, 'turns');
+    assert.equal(s.daily[0].length, DAILY_COLUMNS.length, 'row length matches the contract');
   });
 });
 

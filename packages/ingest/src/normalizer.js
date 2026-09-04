@@ -1,5 +1,6 @@
 import { discoverProjects, matchProject } from './discovery.js';
 import { estimateCost, costBreakdown } from './pricing.js';
+import { DAILY_COLUMNS } from './daily.js';
 
 // Per-model context windows, used only to flag impossible per-call context —
 // a delta-accounting regression shows up here immediately. Prefix-matched, and
@@ -73,7 +74,7 @@ function buildDaily(s, model, costEstimated, cost) {
 
   const totalWeight = costEstimated ? 0 : slices.reduce((sum, d) => sum + weightOf(d), 0);
 
-  return slices.map(d => {
+  const rows = slices.map(d => {
     const asSession = {
       model,
       inputTokens: d.input || 0,
@@ -98,8 +99,22 @@ function buildDaily(s, model, costEstimated, cost) {
       round8(parts.output),
       round8(parts.cacheRead),
       round8(parts.cacheWrite),
+      d.turns || 0,
     ];
   });
+
+  // DAILY_COLUMNS enforced nothing until now: buildDaily hand-builds this row
+  // and addDay hand-writes the zeroed slice, which is how cacheWrite1h ended
+  // up accumulated and priced but absent from the emitted row. Assert the
+  // length so a third column-ordering bug cannot hide here.
+  for (const row of rows) {
+    if (row.length !== DAILY_COLUMNS.length) {
+      throw new Error(
+        `daily row has ${row.length} columns, DAILY_COLUMNS declares ${DAILY_COLUMNS.length}`
+      );
+    }
+  }
+  return rows;
 }
 
 export function normalize(sessions, projects) {
@@ -173,6 +188,7 @@ export function normalize(sessions, projects) {
         costEstimated,
         costParts,
         apiCalls: s.apiCalls || 0,
+        userTurns: s.userTurns ?? null,
         isSubagent: !!s.isSubagent,
         daily: buildDaily(s, model, costEstimated, cost),
         currency: s.currency || 'USD',
