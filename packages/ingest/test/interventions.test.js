@@ -66,7 +66,7 @@ describe('mergeResults', () => {
     fs.writeFileSync(sidecar, JSON.stringify({
       '2026-09-15::MCP to CLI': { verdict: 'supported', frozenAt: '2026-10-01' },
     }));
-    const entries = mergeResults(
+    const { entries } = mergeResults(
       [{ date: '2026-09-15', label: 'MCP to CLI', expect: 'tokensPerRequest' }],
       sidecar
     );
@@ -75,7 +75,7 @@ describe('mergeResults', () => {
   });
 
   it('leaves entries untouched when no sidecar exists', () => {
-    const entries = mergeResults(
+    const { entries } = mergeResults(
       [{ date: '2026-09-15', label: 'x', expect: 'activeDays' }],
       '/nonexistent/interventions.results.json'
     );
@@ -89,7 +89,7 @@ describe('mergeResults', () => {
       '2026-09-15::MCP to CLI': 'supported', // not an object — malformed operator edit
       '2026-09-16::no verdict': { frozenAt: '2026-10-01' }, // object, but no string verdict
     }));
-    const entries = mergeResults(
+    const { entries, warnings } = mergeResults(
       [
         { date: '2026-09-15', label: 'MCP to CLI', expect: 'tokensPerRequest' },
         { date: '2026-09-16', label: 'no verdict', expect: 'activeDays' },
@@ -98,19 +98,19 @@ describe('mergeResults', () => {
     );
     assert.equal(entries[0].result, undefined);
     assert.equal(entries[1].result, undefined);
-    assert.equal(entries.warnings.length, 2, 'both malformed entries produce a warning');
+    assert.equal(warnings.length, 2, 'both malformed entries produce a warning');
   });
 
   it('warns and returns entries unchanged on malformed sidecar JSON rather than throwing', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ivr-badjson-'));
     const sidecar = path.join(dir, 'interventions.results.json');
     fs.writeFileSync(sidecar, '{ not json');
-    const entries = mergeResults(
+    const { entries, warnings } = mergeResults(
       [{ date: '2026-09-15', label: 'x', expect: 'activeDays' }],
       sidecar
     );
     assert.equal(entries[0].result, undefined);
-    assert.equal(entries.warnings.length, 1);
+    assert.equal(warnings.length, 1);
   });
 
   it('warns and returns entries unchanged when the sidecar is not a keyed object', () => {
@@ -122,12 +122,12 @@ describe('mergeResults', () => {
     for (const bad of ['[1,2,3]', '"oops"', 'null']) {
       const sidecar = path.join(dir, `${bad.replace(/\W/g, '')}.json`);
       fs.writeFileSync(sidecar, bad);
-      const entries = mergeResults(
+      const { entries, warnings } = mergeResults(
         [{ date: '2026-09-15', label: 'x', expect: 'activeDays' }],
         sidecar
       );
       assert.equal(entries[0].result, undefined, `bad sidecar: ${bad}`);
-      assert.equal(entries.warnings.length, 1, `bad sidecar: ${bad}`);
+      assert.equal(warnings.length, 1, `bad sidecar: ${bad}`);
     }
   });
 });

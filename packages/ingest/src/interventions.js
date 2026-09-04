@@ -84,36 +84,29 @@ export function readInterventions(filePath) {
  * carries it through to tokens.json. Because it is hand-edited, a frozen entry
  * is validated the same way readInterventions validates interventions.json:
  * warn and skip rather than attach garbage that would crash the dashboard's
- * render. Warnings come back as a `.warnings` property on the returned array
- * (not a `{ entries, warnings }` wrapper) so the `-> entries` shape the caller
- * indexes into (`entries[0].result`) is unchanged; `index.js` prints them
- * through its existing `WARNING:` loop.
+ * render. Returns `{ entries, warnings }`, the same contract as
+ * `readInterventions` above, so the two warn-and-skip functions in this module
+ * read the same way; `index.js` prints the warnings through its existing
+ * `WARNING:` loop.
  */
 export function mergeResults(entries, sidecarPath) {
   const warnings = [];
-  if (!fs.existsSync(sidecarPath)) {
-    const out = [...entries];
-    out.warnings = warnings;
-    return out;
-  }
+  const bail = () => ({ entries: [...entries], warnings });
+  if (!fs.existsSync(sidecarPath)) return bail();
 
   let frozen;
   try {
     frozen = JSON.parse(fs.readFileSync(sidecarPath, 'utf8'));
   } catch (e) {
     warnings.push(`interventions.results.json is not valid JSON (${e.message}) — ignoring the file.`);
-    const out = [...entries];
-    out.warnings = warnings;
-    return out;
+    return bail();
   }
   if (!frozen || typeof frozen !== 'object' || Array.isArray(frozen)) {
     warnings.push('interventions.results.json must be an object keyed by "date::label" — ignoring the file.');
-    const out = [...entries];
-    out.warnings = warnings;
-    return out;
+    return bail();
   }
 
-  const out = entries.map(e => {
+  const merged = entries.map(e => {
     const key = `${e.date}::${e.label}`;
     if (!(key in frozen)) return e;
     const result = frozen[key];
@@ -123,6 +116,5 @@ export function mergeResults(entries, sidecarPath) {
     }
     return { ...e, result };
   });
-  out.warnings = warnings;
-  return out;
+  return { entries: merged, warnings };
 }
