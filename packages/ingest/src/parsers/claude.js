@@ -30,7 +30,7 @@ function findSubagentTranscripts(root, inSubagents = false, out = []) {
   return out;
 }
 
-function parseTranscriptFile(filePath) {
+function parseTranscriptFile(filePath, isSubagent) {
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.trim().split('\n');
 
@@ -45,7 +45,11 @@ function parseTranscriptFile(filePath) {
   const usageById = new Map();
   // Turns are found during the line loop, but the dominant model is not known
   // until after it — so buffer turn days here and apply them to the winning
-  // model's byDay once the winner is chosen.
+  // model's byDay once the winner is chosen. Subagent transcripts never
+  // populate this: a delegated agent doesn't receive human prompts, and the
+  // upstream `isSidechain` guard in isUserTurn is documented as defensive
+  // (older Claude Code versions inlined sidechains into the main transcript),
+  // so this must not depend on that guard holding for subagent files too.
   const turnDays = [];
 
   for (const line of lines) {
@@ -63,7 +67,7 @@ function parseTranscriptFile(filePath) {
       cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
     }
 
-    if (isUserTurn(entry)) {
+    if (!isSubagent && isUserTurn(entry)) {
       turnDays.push(entry.timestamp ? entry.timestamp.slice(0, 10) : null);
     }
 
@@ -141,13 +145,19 @@ function parseTranscriptFile(filePath) {
 
   // Turns belong to the transcript, not to a model — a person typing a prompt
   // is model-agnostic. Putting them on every sibling row would double-count
-  // them and halve Requests/Turn, so they go on exactly one row.
+  // them and halve Requests/Turn, so they go on exactly one row. Skipped
+  // entirely for subagent transcripts (turnDays is already empty for them,
+  // per the guard above, but the `!isSubagent` here makes the guarantee
+  // structural rather than incidental — it must hold even if a future
+  // transcript format stops flagging delegated prompts as isSidechain).
   let turnModel = null;
   let bestCalls = -1;
-  for (const [model, acc] of [...byModel.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    if (acc.calls > bestCalls) {
-      bestCalls = acc.calls;
-      turnModel = model;
+  if (!isSubagent) {
+    for (const [model, acc] of [...byModel.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      if (acc.calls > bestCalls) {
+        bestCalls = acc.calls;
+        turnModel = model;
+      }
     }
   }
   let userTurns = 0;
@@ -182,7 +192,7 @@ export function parseClaudeJSON(projectsDir) {
     const emit = (filePath, baseId, isSubagent) => {
       let transcript;
       try {
-        transcript = parseTranscriptFile(filePath);
+        transcript = parseTranscriptFile(filePath, isSubagent);
       } catch {
         return;
       }

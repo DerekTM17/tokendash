@@ -245,4 +245,31 @@ describe('user turns', () => {
     assert.equal(d1.turns, 1);
     assert.equal(d1.calls, 0, 'no call landed on the first day');
   });
+
+  it('never lets a subagent transcript contribute turns, even without isSidechain', () => {
+    const dir = tmpdir('turns-sub-');
+    const proj = path.join(dir, '-home-test-proj');
+    const subDir = path.join(proj, 'subagents');
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(proj, 'sess.jsonl'), [
+      userLine('2026-07-01T10:00:00Z', 'main prompt'),
+      assistant('a', '2026-07-01T10:00:01Z', usage(10, 0, 100)),
+    ].join('\n') + '\n');
+    // Deliberately NOT isSidechain: the guard must not depend on that flag,
+    // which the spec documents as defensive (older Claude Code versions
+    // inlined sidechains into the main transcript). If the fix regressed to
+    // relying on isUserTurn's isSidechain clause instead of the isSubagent
+    // parameter, these entries would count and this test would catch it.
+    fs.writeFileSync(path.join(subDir, 'agent-x.jsonl'), [
+      userLine('2026-07-01T11:00:00Z', 'delegated prompt'),
+      assistant('b', '2026-07-01T11:00:01Z', usage(10, 0, 100)),
+    ].join('\n') + '\n');
+
+    const sessions = parseClaudeJSON(dir);
+    const sub = sessions.find(s => s.isSubagent);
+    assert.ok(sub, 'subagent session found');
+    assert.equal(sub.userTurns, null, 'subagent rows never carry userTurns');
+    const d = sub.dailyTokens.find(d => d.day === '2026-07-01');
+    assert.equal(d.turns || 0, 0, 'subagent day slices carry no turns even with turn-eligible entries');
+  });
 });
