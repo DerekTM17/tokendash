@@ -6,6 +6,12 @@ also include **Tradeoffs / Alternatives considered**.
 
 Curated, not exhaustive — `git log` has every commit.
 
+## 2026-09-04
+
+### Driver decomposition and intervention evaluation panels
+
+**Why:** Two panels close out the analysis layer: driver decomposition splits cost into activeDays x turnsPerActiveDay x requestsPerTurn x tokensPerRequest x pricePerToken (day-sliced, all-four-bucket Tokens/Request so the identity multiplies back out to real cost) so a bill change can be pinned on one factor instead of argued about qualitatively; intervention evaluation compares matched before/after windows for a pre-registered expect (declared before the result is seen — the whole mechanism that makes a verdict mean anything), checks model/project/subagent/cache-mix confounds, and reports supported/not-supported/confounded/underpowered/provisional/pending/refused with reasons attached. interventions.json and interventions.results.json are both gitignored and never leave the machine. Real-corpus verification at ship: 1652 turns, 60634 requests, 36.70 requests/turn (up from 32.81 at the 2026-09-03 design pass, consistent with the documented upward drift), subagent turns exactly 0, zero sessions breaching the requests/turn >= 1 floor, turnCoverage.share 0.951. AGENTS.md now records that this panel's Tokens/Request (four buckets) and PerCallTrend's per-call context (three buckets, excludes output) are deliberately different measures. Follow-up recorded in BACKLOG (Someday): use ~/.claude/history.jsonl as a direct deletion detector for the coverage guard, deliberately deferred to avoid a new data source mid-build.
+
 ## 2026-08-18
 
 ### Tooltips for every term, and the repo published at DerekTM17/tokendash
