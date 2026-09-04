@@ -57,7 +57,10 @@ export default function InterventionPanel({ sessions, interventions = [], today,
   const results = useMemo(
     () => interventions.map(iv => ({
       iv,
-      result: evaluate(sessions, iv, { today, others: interventions }),
+      // A frozen result (see mergeResults in packages/ingest/src/interventions.js)
+      // is a record of what was true before the before-window aged out of
+      // retention — prefer it over re-deriving a now-unrecoverable number.
+      result: iv.result || evaluate(sessions, iv, { today, others: interventions }),
     })),
     [sessions, interventions, today],
   );
@@ -99,8 +102,15 @@ export default function InterventionPanel({ sessions, interventions = [], today,
                   <InfoTip term={TERMS[iv.expect]} />
                 </p>
 
+                {iv.result && (
+                  <p style={{ fontFamily: 'var(--f-body)', fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: '0 0 8px' }}>
+                    Frozen {iv.result.frozenAt} — a record of what was true before older
+                    sessions aged out, not a live number.
+                  </p>
+                )}
+
                 <ul style={{ margin: '0 0 8px', paddingLeft: 18, fontFamily: 'var(--f-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-                  {result.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                  {(result.reasons ?? []).map((r, i) => <li key={i}>{r}</li>)}
                 </ul>
 
                 {result.confounds?.length > 0 && (

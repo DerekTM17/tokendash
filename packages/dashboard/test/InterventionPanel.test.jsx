@@ -51,6 +51,31 @@ describe('InterventionPanel', () => {
     expect(screen.getAllByText(/pre-registered/i).length).toBeGreaterThan(0);
   });
 
+  it('prefers a frozen result over calling evaluate', () => {
+    // This date/sessions pair evaluates live to `refused` (see "shows the
+    // refusal reason" above — coverage begins after the before-window). A
+    // frozen `supported` result attached to the intervention must win instead
+    // of that live recomputation: the whole point of freezing a matured
+    // verdict is that it stops changing as history is swept out from under it.
+    const frozen = { verdict: 'supported', reasons: ['tokensPerRequest fell from 2000 to 1000.'], frozenAt: '2026-10-01' };
+    render(<InterventionPanel sessions={sessions} today="2026-08-20" delay={0}
+      interventions={[{ ...iv[0], date: '2026-07-03', result: frozen }]} />);
+    expect(screen.getByText(/supported/i)).toBeTruthy();
+    expect(screen.queryByText(/refused/i)).toBe(null);
+    expect(screen.getByText(/frozen 2026-10-01/i)).toBeTruthy();
+  });
+
+  it('renders a partial frozen result (no reasons or confounds) without crashing', () => {
+    // interventions.results.json is a hand-written, minimal sidecar — the spec's
+    // own fixture only carries { verdict, frozenAt }. result.reasons must not
+    // be mapped unguarded or this is `undefined.map` and a hard render failure.
+    const frozen = { verdict: 'supported', frozenAt: '2026-10-01' };
+    render(<InterventionPanel sessions={sessions} today="2026-08-20" delay={0}
+      interventions={[{ ...iv[0], result: frozen }]} />);
+    expect(screen.getByText(/supported/i)).toBeTruthy();
+    expect(screen.getByText(/frozen 2026-10-01/i)).toBeTruthy();
+  });
+
   it('names every dynamic glossary term the panel actually asks for', () => {
     // glossary.test.js only sees literal term="..." strings; TERMS[key] is a
     // dynamic expression it cannot see, so this colocated assertion is the

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { discoverProjects } from './discovery.js';
 import { normalize } from './normalizer.js';
-import { readInterventions } from './interventions.js';
+import { readInterventions, mergeResults } from './interventions.js';
 import { parseClaudeJSON } from './parsers/claude.js';
 import { parseOpencodeSessions } from './parsers/opencode.js';
 import { parseCodexData, defaultPath as codexPath } from './parsers/codex.js';
@@ -49,6 +49,17 @@ function ingest() {
     readInterventions(path.resolve(__dirname, '..', '..', '..', 'interventions.json'));
   for (const w of interventionWarnings) console.error(`WARNING: ${w}`);
 
+  // A supported verdict becomes refused once its before-window is swept by the
+  // 30-day retention job — the number changes because history was deleted, not
+  // because the work changed. A matured intervention's result is frozen by the
+  // dashboard operator into this sidecar; merge it in so tokens.json carries
+  // the frozen figure instead of re-deriving a now-unrecoverable one.
+  const interventionsWithResults = mergeResults(
+    interventions,
+    path.resolve(__dirname, '..', '..', '..', 'interventions.results.json')
+  );
+  for (const w of interventionsWithResults.warnings || []) console.error(`WARNING: ${w}`);
+
   for (const [model, { sessions: n, tokens }] of Object.entries(unpricedModels)) {
     console.error(
       `WARNING: no pricing entry for "${model}" — ${n} session(s), ` +
@@ -83,7 +94,7 @@ function ingest() {
     tools: [...new Set(normalized.map(s => s.tool))],
     sessions: normalized,
     totals,
-    interventions,
+    interventions: interventionsWithResults,
   };
 
   const outDir = path.dirname(outputPath);

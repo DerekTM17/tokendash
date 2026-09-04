@@ -70,3 +70,59 @@ export function readInterventions(filePath) {
   }
   return { entries, warnings };
 }
+
+/**
+ * Attach frozen results to their interventions.
+ *
+ * A verdict is only computable while its before-window is still on disk. Once
+ * the 30-day retention sweep passes that window, the same intervention re-reads
+ * as `refused` — the number changes because history was deleted, not because
+ * anything about the work changed. Freezing a matured result keeps a record of
+ * what was true when it could still be measured.
+ *
+ * The sidecar is written by the dashboard operator, not by ingest; ingest only
+ * carries it through to tokens.json. Because it is hand-edited, a frozen entry
+ * is validated the same way readInterventions validates interventions.json:
+ * warn and skip rather than attach garbage that would crash the dashboard's
+ * render. Warnings come back as a `.warnings` property on the returned array
+ * (not a `{ entries, warnings }` wrapper) so the `-> entries` shape the caller
+ * indexes into (`entries[0].result`) is unchanged; `index.js` prints them
+ * through its existing `WARNING:` loop.
+ */
+export function mergeResults(entries, sidecarPath) {
+  const warnings = [];
+  if (!fs.existsSync(sidecarPath)) {
+    const out = [...entries];
+    out.warnings = warnings;
+    return out;
+  }
+
+  let frozen;
+  try {
+    frozen = JSON.parse(fs.readFileSync(sidecarPath, 'utf8'));
+  } catch (e) {
+    warnings.push(`interventions.results.json is not valid JSON (${e.message}) — ignoring the file.`);
+    const out = [...entries];
+    out.warnings = warnings;
+    return out;
+  }
+  if (!frozen || typeof frozen !== 'object' || Array.isArray(frozen)) {
+    warnings.push('interventions.results.json must be an object keyed by "date::label" — ignoring the file.');
+    const out = [...entries];
+    out.warnings = warnings;
+    return out;
+  }
+
+  const out = entries.map(e => {
+    const key = `${e.date}::${e.label}`;
+    if (!(key in frozen)) return e;
+    const result = frozen[key];
+    if (!result || typeof result !== 'object' || typeof result.verdict !== 'string') {
+      warnings.push(`interventions.results.json["${key}"] is not a valid frozen result — ignoring.`);
+      return e;
+    }
+    return { ...e, result };
+  });
+  out.warnings = warnings;
+  return out;
+}
