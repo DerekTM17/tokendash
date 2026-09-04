@@ -273,3 +273,44 @@ describe('user turns', () => {
     assert.equal(d.turns || 0, 0, 'subagent day slices carry no turns even with turn-eligible entries');
   });
 });
+
+describe('subagent turns', () => {
+  it('never counts a dispatch prompt as a user turn', () => {
+    // parseClaudeJSON scans base for PROJECT DIRECTORIES and reads .jsonl
+    // inside them — a transcript written straight into base is never seen
+    // (verified: flat fixture yields 0 sessions, nested yields 1). Subagent
+    // transcripts nest under the project dir, not under base.
+    const base = tmpdir('subturn-');
+    const dir = path.join(base, 'proj');
+    const subDir = path.join(dir, 'subagents');
+    fs.mkdirSync(subDir, { recursive: true });
+
+    fs.writeFileSync(path.join(dir, 'main.jsonl'), [
+      userLine('2026-07-01T10:00:00Z', 'do the thing'),
+      assistant('a', '2026-07-01T10:00:01Z', usage(10, 0, 100)),
+    ].join('\n') + '\n');
+
+    // A subagent transcript opens with the dispatch prompt: type user,
+    // isSidechain true, non-meta, non-tool_result. It passes every
+    // content-shaped test and is not a human turn.
+    fs.writeFileSync(path.join(subDir, 'agent.jsonl'), [
+      userLine('2026-07-01T10:00:02Z', 'Search the codebase for X', { isSidechain: true }),
+      assistant('b', '2026-07-01T10:00:03Z', usage(10, 0, 100)),
+      assistant('c', '2026-07-01T10:00:04Z', usage(10, 100, 0)),
+    ].join('\n') + '\n');
+
+    const sessions = parseClaudeJSON(base);
+    const main = sessions.filter(s => !s.isSubagent);
+    const subs = sessions.filter(s => s.isSubagent);
+
+    assert.equal(subs.length, 1);
+    assert.equal(subs[0].userTurns, null, 'subagent rows carry null, never 0');
+    assert.equal(main.reduce((n, s) => n + (s.userTurns || 0), 0), 1);
+
+    // Requests/Turn counts delegated requests in the numerator: a Task dispatch
+    // is the most consequential form of tool-call amplification there is.
+    const requests = sessions.reduce((n, s) => n + s.apiCalls, 0);
+    const turns = sessions.reduce((n, s) => n + (s.userTurns || 0), 0);
+    assert.equal(requests / turns, 3);
+  });
+});
