@@ -3,6 +3,7 @@
     "date": "2026-09-15",
     "label": "Replaced MCP servers with CLI tools",
     "expect": "tokensPerRequest",
+    "direction": "down",
     "note": "Removed 4 MCP servers; schema overhead was ~55K tokens/session",
     "expectedShift": []
   }

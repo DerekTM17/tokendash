@@ -124,6 +124,37 @@ describe('evaluate', () => {
     expect(r.confounds.some(c => c.dimension === 'intervention')).toBe(true);
   });
 
+  // An adoption/engagement intervention aims a factor UPWARD. The comparison
+  // holds every other factor still, so only `activeDays` moves: 7 active days
+  // before against 14 after is exactly the shape "we got the team using it"
+  // produces.
+  const adoption = () => [claude('a', [
+    ...days('2026-07-01', 7, d => row(d, 10, 20000, 8, 2)),
+    ...days('2026-07-16', 14, d => row(d, 10, 20000, 8, 2)),
+  ])];
+
+  it('supports a rise when the declared direction is up', () => {
+    const r = evaluate(adoption(), { ...iv, expect: 'activeDays', direction: 'up' }, { today });
+    expect(r.before.activeDays).toBe(7);
+    expect(r.after.activeDays).toBe(14);
+    expect(r.verdict).toBe('supported');
+    expect(r.reasons.join(' ')).toMatch(/activeDays rose from 7 to 14/);
+  });
+
+  it('does not support a rise when no direction is declared', () => {
+    // The default is `down`, so an omitted direction keeps the meaning every
+    // interventions.json written before the field existed already had.
+    const r = evaluate(adoption(), { ...iv, expect: 'activeDays' }, { today });
+    expect(r.verdict).toBe('not-supported');
+    expect(r.reasons.join(' ')).toMatch(/activeDays did not fall/);
+  });
+
+  it('does not support a fall when the declared direction is up', () => {
+    const r = evaluate(corpus(), { ...iv, direction: 'up' }, { today });
+    expect(r.verdict).toBe('not-supported');
+    expect(r.reasons.join(' ')).toMatch(/tokensPerRequest did not rise/);
+  });
+
   it('rejects a window length that is not a multiple of 7', () => {
     expect(() => evaluate(corpus(), iv, { today, windowDays: 10 })).toThrow(/multiple of 7/);
   });

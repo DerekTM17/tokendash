@@ -97,7 +97,11 @@ export function evaluate(sessions, intervention, options = {}) {
     afterFrom: shift(date, 1), afterTo: shift(date, n),
   };
   const reasons = [];
-  const base = { windows, declared: intervention.expect, reasons, confounds: [] };
+  const base = {
+    windows, declared: intervention.expect,
+    direction: intervention.direction === 'up' ? 'up' : 'down',
+    reasons, confounds: [],
+  };
 
   if (date > opts.today) {
     return { ...base, verdict: 'pending', reasons: ['The intervention date is in the future.'] };
@@ -188,9 +192,18 @@ export function evaluate(sessions, intervention, options = {}) {
     return { ...result, verdict: 'provisional' };
   }
 
-  const moved = after[intervention.expect] < before[intervention.expect];
+  // `expect` names a factor AND a direction. Two of the five factors are levers
+  // you want to go UP — the spec's own table calls ActiveDays adoption and
+  // Turns/ActiveDay engagement — so hardcoding "lower is better" reports an
+  // adoption rate that doubled as `not-supported`. `direction` is optional and
+  // defaults to 'down' (see readInterventions), so a declaration written before
+  // the field existed keeps exactly the meaning it had.
+  const up = intervention.direction === 'up';
+  const b = before[intervention.expect];
+  const a = after[intervention.expect];
+  const moved = up ? a > b : a < b;
   reasons.push(moved
-    ? `${intervention.expect} fell from ${before[intervention.expect]} to ${after[intervention.expect]}.`
-    : `${intervention.expect} did not fall.`);
+    ? `${intervention.expect} ${up ? 'rose' : 'fell'} from ${b} to ${a}.`
+    : `${intervention.expect} did not ${up ? 'rise' : 'fall'}.`);
   return { ...result, verdict: moved ? 'supported' : 'not-supported' };
 }

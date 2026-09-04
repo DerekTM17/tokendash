@@ -340,6 +340,7 @@ the existing architecture.
   "date": "2026-09-15",
   "label": "Replaced MCP servers with CLI tools",
   "expect": "tokensPerRequest",
+  "direction": "down",
   "note": "Removed 4 MCP servers; schema overhead was ~55K tokens/session"
 }]
 ```
@@ -364,6 +365,32 @@ from a rationalization.
 
 All five factors are still displayed, so an unexpected mover is visible. Only the
 declared one is the claim.
+
+### The prediction is a factor AND a direction
+
+`expect` alone is not a falsifiable claim, and an earlier version of this spec
+was wrong to imply it was. It fixed no direction anywhere while listing only
+reduction-flavoured verdicts, which read as "lower is better" — and the
+implementation duly hardcoded `after[expect] < before[expect]`. Two of the five
+factors in the table above are levers you want to move the *other* way:
+`ActiveDays` is adoption and `Turns/ActiveDay` is engagement. An intervention
+that doubles adoption from 7 active days to 14 is exactly what such a change
+aims at, and under a fixed "lower is better" rule it is reported
+`not-supported` — a wrong verdict on an input the schema explicitly accepts.
+
+`interventions.json` therefore carries an optional
+`"direction": "down" | "up"`, validated on read alongside `expect` and subject
+to the same warn-and-skip discipline as every other field. It **defaults to
+`down`**, so a declaration written before the field existed keeps precisely the
+meaning it had.
+
+The direction is part of the pre-registration, not a presentation detail. Five
+factors and two directions is ten chances to find a flattering story; declaring
+the factor while leaving the direction to be settled after the fact throws away
+half of what pre-registration buys. The panel therefore prints both — "predicted
+to move active days up" — so a reader can see what would have counted as a
+failure, and the glossary says a declaration naming no direction is read as
+predicting a fall.
 
 ### Windows
 
@@ -599,3 +626,10 @@ Two claims in the earlier draft were simply wrong and are withdrawn: that
 appending to `DAILY_COLUMNS` requires updating every destructuring site (it
 breaks none), and that `index.js` aborts on unpriced models (it warns and
 continues).
+
+**2026-09-04, after the whole-branch review of `feat/analysis-layer`.** The
+review found `expect` under-specified: the spec named a factor and never named a
+direction, while listing only reduction-flavoured verdicts. "The prediction is a
+factor AND a direction" above is new, and the declaration example now carries
+the field. Correcting only the code would have left this document wrong for the
+next reader.

@@ -141,11 +141,11 @@ export const GLOSSARY = {
   },
   'intervention': {
     title: 'Intervention',
-    body: 'A change to how you work, written down with a date and a prediction before you look at the result. Declaring the prediction in advance is the point: with five factors and two directions there are ten ways to find a flattering story after the fact, so a metric chosen afterwards proves nothing.',
+    body: 'A change to how you work, written down with a date and a prediction before you look at the result. The prediction is a factor and a direction — which number you expect to move, and which way. Declaring both in advance is the point: with five factors and two directions there are ten ways to find a flattering story after the fact, so a metric chosen afterwards proves nothing. A declaration that names no direction is read as predicting a fall.',
   },
   'verdict': {
     title: 'Verdict',
-    body: 'Supported means the factor you predicted moved the way you said. Confounded means something else moved too, so the result cannot be pinned on the change. Underpowered means too few active days to tell. Refused means the comparison could not be made honestly at all — usually because the baseline reaches into transcripts that were deleted.',
+    body: 'Supported means the factor you named moved in the direction you declared — both are recorded up front, and a declaration that names no direction is read as predicting a fall. Not supported means it did not. Confounded means something else moved too, so the result cannot be pinned on the change. Underpowered means too few active days to tell. Provisional means the after-window has not finished running yet. Refused means the comparison could not be made honestly at all — usually because the baseline reaches into transcripts that were deleted.',
   },
 };
 

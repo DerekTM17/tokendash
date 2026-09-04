@@ -12,7 +12,12 @@ import InfoTip from './InfoTip.jsx';
 export { TERMS };
 
 /** Human label for a declared factor. Falls back to the raw key so a factor
- *  name this panel doesn't recognise still shows up rather than vanishing. */
+ *  name this panel doesn't recognise still shows up rather than vanishing.
+ *
+ *  The direction is printed alongside it, because a factor name on its own is
+ *  not a falsifiable claim: two of the five factors are levers you want to go
+ *  UP, so "predicted to move active days" does not say what would count as a
+ *  failure. `direction` defaults to `down` in readInterventions. */
 const FACTOR_LABELS = {
   activeDays: 'active days',
   turnsPerActiveDay: 'turns per active day',
@@ -100,12 +105,18 @@ export default function InterventionPanel({ sessions, interventions = [], today,
                 <p style={{ fontFamily: 'var(--f-body)', fontSize: 11.5, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
                   {iv.date} — predicted to move {FACTOR_LABELS[iv.expect] || iv.expect}
                   <InfoTip term={TERMS[iv.expect]} />
+                  {' '}{iv.direction === 'up' ? 'up' : 'down'}
                 </p>
 
                 {iv.result && (
+                  // `mergeResults` requires `frozenAt`, so the dateless branch
+                  // should be unreachable from ingest — but rendering
+                  // "Frozen  — a record of what was true..." with a hole where
+                  // the date belongs is a provenance claim with no provenance
+                  // in it, and this panel must not make one.
                   <p style={{ fontFamily: 'var(--f-body)', fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: '0 0 8px' }}>
-                    Frozen {iv.result.frozenAt} — a record of what was true before older
-                    sessions aged out, not a live number.
+                    {iv.result.frozenAt ? `Frozen ${iv.result.frozenAt}` : 'Frozen at an unrecorded date'} — a
+                    record of what was true before older sessions aged out, not a live number.
                   </p>
                 )}
 

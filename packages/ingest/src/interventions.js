@@ -16,6 +16,15 @@ export const FACTOR_KEYS = [
   'pricePerToken',
 ];
 
+/** Which way `expect` is predicted to move. `activeDays` and `turnsPerActiveDay`
+ *  are adoption and engagement levers — an intervention aimed at either wants
+ *  the number to go UP — so a verdict cannot assume "lower is better" without
+ *  calling a doubled adoption rate a failure. Optional, defaulting to `down`, so
+ *  every interventions.json written before this field existed keeps its meaning
+ *  exactly. */
+export const DIRECTIONS = ['down', 'up'];
+const DEFAULT_DIRECTION = 'down';
+
 const isDay = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 export function readInterventions(filePath) {
@@ -56,10 +65,18 @@ export function readInterventions(filePath) {
       );
       continue;
     }
+    if (entry.direction !== undefined && !DIRECTIONS.includes(entry.direction)) {
+      warnings.push(
+        `${where} has "direction": ${JSON.stringify(entry.direction)}. ` +
+        `Valid values: ${DIRECTIONS.join(', ')} — skipped.`
+      );
+      continue;
+    }
     entries.push({
       date: entry.date,
       label: entry.label,
       expect: entry.expect,
+      direction: entry.direction ?? DEFAULT_DIRECTION,
       note: typeof entry.note === 'string' ? entry.note : '',
       // Pre-registered categories exempt from the confound verdict. Cost shares
       // are endogenous: an intervention that scopes subagent dispatches better
@@ -84,7 +101,9 @@ export function readInterventions(filePath) {
  * carries it through to tokens.json. Because it is hand-edited, a frozen entry
  * is validated the same way readInterventions validates interventions.json:
  * warn and skip rather than attach garbage that would crash the dashboard's
- * render. Returns `{ entries, warnings }`, the same contract as
+ * render. A frozen entry is `{ verdict, frozenAt, ... }`; both of those are
+ * required and anything else present is carried through untouched.
+ * Returns `{ entries, warnings }`, the same contract as
  * `readInterventions` above, so the two warn-and-skip functions in this module
  * read the same way; `index.js` prints the warnings through its existing
  * `WARNING:` loop.
@@ -110,8 +129,18 @@ export function mergeResults(entries, sidecarPath) {
     const key = `${e.date}::${e.label}`;
     if (!(key in frozen)) return e;
     const result = frozen[key];
-    if (!result || typeof result !== 'object' || typeof result.verdict !== 'string') {
-      warnings.push(`interventions.results.json["${key}"] is not a valid frozen result — ignoring.`);
+    // `frozenAt` is required, not decorative: the panel labels the entry "a
+    // record of what was true" on a given date, and without one it renders that
+    // sentence with a blank where the date belongs — a provenance claim with no
+    // provenance in it. Refusing the entry is better than displaying a frozen
+    // number that cannot say when it froze.
+    if (!result || typeof result !== 'object'
+      || typeof result.verdict !== 'string'
+      || typeof result.frozenAt !== 'string' || !result.frozenAt.trim()) {
+      warnings.push(
+        `interventions.results.json["${key}"] is not a valid frozen result ` +
+        `(needs a string "verdict" and a string "frozenAt") — ignoring.`
+      );
       return e;
     }
     return { ...e, result };

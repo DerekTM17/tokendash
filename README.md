@@ -92,12 +92,16 @@ which deliberately excludes output; see `AGENTS.md`.
 
 **Interventions** answer "did that change actually work?" You declare a
 change before it happens: copy `interventions.example.json` to
-`interventions.json` at the repo root and write down the date, a label, and
-the one factor you expect it to move. `interventions.json` is gitignored and
-never leaves your machine. Declaring `expect` before looking at the result is
-the whole mechanism — with five factors and two directions there are ten ways
-to find a flattering number after the fact, and a factor picked once you have
-already seen the outcome proves nothing. Re-run ingest and the panel compares
+`interventions.json` at the repo root and write down the date, a label, the
+one factor you expect it to move, and which way you expect it to move
+(`"direction": "down"` or `"up"`; omit it and `down` is assumed).
+`interventions.json` is gitignored and never leaves your machine. Declaring
+`expect` and `direction` before looking at the result is the whole mechanism —
+with five factors and two directions there are ten ways to find a flattering
+number after the fact, and a factor picked once you have already seen the
+outcome proves nothing. Two of the five factors are levers you normally want to
+go *up*: active days is adoption and turns per active day is engagement, so
+"did it work?" cannot mean "did the number fall" for every declaration. Re-run ingest and the panel compares
 matched before/after windows, checks whether something else moved at the same
 time that could explain the shift instead (model mix, project mix, subagent
 share, token-type mix including cache), and reports a verdict — supported, not supported,
@@ -105,7 +109,23 @@ confounded, underpowered, provisional, pending, or refused — with the
 reasoning spelled out rather than just a number. Once a before-window ages
 out of the 30-day retention sweep a verdict can no longer be recomputed, so a
 matured result can be hand-frozen into `interventions.results.json` (also
-gitignored) to keep the record past that point.
+gitignored) to keep the record past that point. Nothing writes that file for
+you. It is an object keyed by `"<date>::<label>"` — matching the intervention
+exactly — whose values are the verdict as it stood:
+
+```json
+{
+  "2026-09-15::Replaced MCP servers with CLI tools": {
+    "verdict": "supported",
+    "frozenAt": "2026-10-14",
+    "reasons": ["tokensPerRequest fell from 118500 to 71200."]
+  }
+}
+```
+
+`verdict` and `frozenAt` are both required — an entry missing either is warned
+about and ignored. `reasons` is an optional array of strings; anything else
+present is carried through and displayed as-is.
 
 ## Optional: the session boundary detector
 
