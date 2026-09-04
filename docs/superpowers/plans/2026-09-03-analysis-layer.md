@@ -213,7 +213,16 @@ sidechain and tool_result entries."
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/ingest/test/claude.test.js`. Reuse the existing `tmpdir`, `assistant` and `usage` helpers in that file.
+Append to `packages/ingest/test/claude.test.js`.
+
+**Fixture shape matters.** `parseClaudeJSON(base)` scans `base` for project
+*directories* and reads `.jsonl` files inside them, so a transcript written
+directly into `base` is never parsed — verified: a flat fixture yields 0
+sessions, a nested one yields 1. Every fixture must write its transcript to
+`<base>/proj/<name>.jsonl` and call `parseClaudeJSON(base)`.
+
+`tmpdir`, `assistant` and `usage` do **not** exist in `claude.test.js` — they
+live in `perCall.test.js`. Add local copies, matching that file's versions.
 
 ```js
 const userLine = (ts, content, extra = {}) => JSON.stringify({
@@ -397,7 +406,12 @@ Separate from Task 2 because it is the difference between 32.83 and 11.9 request
 ```js
 describe('subagent turns', () => {
   it('never counts a dispatch prompt as a user turn', () => {
-    const dir = tmpdir('subturn-');
+    // parseClaudeJSON scans base for PROJECT DIRECTORIES and reads .jsonl
+    // inside them — a transcript written straight into base is never seen
+    // (verified: flat fixture yields 0 sessions, nested yields 1). Subagent
+    // transcripts nest under the project dir, not under base.
+    const base = tmpdir('subturn-');
+    const dir = path.join(base, 'proj');
     const subDir = path.join(dir, 'subagents');
     fs.mkdirSync(subDir, { recursive: true });
 
@@ -415,7 +429,7 @@ describe('subagent turns', () => {
       assistant('c', '2026-07-01T10:00:04Z', usage(10, 100, 0)),
     ].join('\n') + '\n');
 
-    const sessions = parseClaudeJSON(dir);
+    const sessions = parseClaudeJSON(base);
     const main = sessions.filter(s => !s.isSubagent);
     const subs = sessions.filter(s => s.isSubagent);
 
