@@ -139,6 +139,14 @@ export const GLOSSARY = {
     title: 'Driver decomposition',
     body: 'Splits a change in spend between the five things that can cause it, so a bigger bill can be traced to using the tool more, sending bigger prompts, or paying a higher rate. Each factor is measured holding the others still, and the five contributions add up to the total change exactly.',
   },
+  'intervention': {
+    title: 'Intervention',
+    body: 'A change to how you work, written down with a date and a prediction before you look at the result. Declaring the prediction in advance is the point: with five factors and two directions there are ten ways to find a flattering story after the fact, so a metric chosen afterwards proves nothing.',
+  },
+  'verdict': {
+    title: 'Verdict',
+    body: 'Supported means the factor you predicted moved the way you said. Confounded means something else moved too, so the result cannot be pinned on the change. Underpowered means too few active days to tell. Refused means the comparison could not be made honestly at all — usually because the baseline reaches into transcripts that were deleted.',
+  },
 };
 
 /** Definition body for a term, or null when the term is unknown. Case-insensitive
